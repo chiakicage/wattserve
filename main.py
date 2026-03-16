@@ -103,31 +103,60 @@ def main():
     )
 
     input_ids = tokenizer(text, return_tensors="pt").to("cuda:0").input_ids[0]
-    print(input_ids)
+    prompt_len = input_ids.shape[0]
+    position_ids = torch.arange(prompt_len, device=input_ids.device)
 
-    output_len = 8192
+    print("Warming up...")
+    for _ in range(3):
+        with torch.no_grad():
+            first_logits = lm_head(model(position_ids, input_ids=input_ids))
+            next_token = torch.argmax(first_logits[-1], dim=-1, keepdim=True)
+            position_ids = torch.tensor(
+                [prompt_len], device=input_ids.device, dtype=torch.long
+            )
+            _ = lm_head(model(position_ids, input_ids=next_token))
+            model.clear_kv_cache()
+    torch.cuda.synchronize()
+
+    output_len = 64
     output_ids = []
-    position_ids = torch.arange(len(input_ids), device=input_ids.device)
+    position_ids = torch.arange(prompt_len, device=input_ids.device)
     torch.cuda.synchronize()
     start_time = time.time()
+    token_times = []
     for _ in range(output_len):
+        torch.cuda.synchronize()
+        t_start = time.perf_counter()
         with torch.no_grad():
             logits = lm_head(model(position_ids, input_ids=input_ids))
             next_token = torch.argmax(logits[-1], dim=-1, keepdim=True)
-            input_ids = next_token
-            position_ids = position_ids[-1:] + 1
-            output_id = next_token.item()
-            if output_id == tokenizer.eos_token_id:
-                break
-            output_ids.append(output_id)
-            output_text = tokenizer.decode(
-                [output_id], skip_special_tokens=True
-            )
-            print(output_text, end="", flush=True)
+        torch.cuda.synchronize()
+        token_times.append(time.perf_counter() - t_start)
+        input_ids = next_token
+        position_ids = position_ids[-1:] + 1
+        # output_id = next_token.item()
+        # if output_id == tokenizer.eos_token_id:
+        #     break
+        # output_ids.append(output_id)
+        # output_text = tokenizer.decode(
+        #     [output_id], skip_special_tokens=True
+        # )
+        # print(output_text, end="", flush=True)
 
+    ttft = token_times[0]
+    tpot = (
+        sum(token_times[1:]) / len(token_times[1:])
+        if len(token_times) > 1
+        else 0
+    )
+    print(f"  TTFT: {ttft * 1000:.2f} ms")
+    print(f"  TPOT: {tpot * 1000:.2f} ms")
+    print(f"  Tokens/sec: {1.0 / tpot:.2f}")
     print("\n", end="", flush=True)
     torch.cuda.synchronize()
     end_time = time.time()
+    # output_text = tokenizer.decode(output_ids, skip_special_tokens=True)
+    # print(output_text)
     token_per_sec = len(output_ids) / (end_time - start_time)
     print(f"Performance: {token_per_sec:.2f}/s")
 

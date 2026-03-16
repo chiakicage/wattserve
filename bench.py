@@ -1,6 +1,5 @@
 import time
 import argparse
-import numpy as np
 
 import torch
 from qwen3_config import (
@@ -20,7 +19,9 @@ MODEL_CONFIGS = {
 }
 
 
-def generate_random_input_ids(prompt_len: int, vocab_size: int, device: str = "cuda:0") -> torch.Tensor:
+def generate_random_input_ids(
+    prompt_len: int, vocab_size: int, device: str = "cuda:0"
+) -> torch.Tensor:
     """Generate random input token IDs."""
     return torch.randint(0, vocab_size, (prompt_len,), device=device)
 
@@ -47,14 +48,20 @@ def benchmark(
     input_ids = generate_random_input_ids(prompt_len, config.vocab_size)
     position_ids = torch.arange(prompt_len, device=input_ids.device)
 
-    lm_head = torch.nn.Linear(config.hidden_size, config.vocab_size, bias=False).to(
-        device="cuda:0", dtype=torch.bfloat16
-    )
+    lm_head = torch.nn.Linear(
+        config.hidden_size, config.vocab_size, bias=False
+    ).to(device="cuda:0", dtype=torch.bfloat16)
 
     print("Warming up...")
     for _ in range(3):
         with torch.no_grad():
-            _ = lm_head(model(position_ids, input_ids=input_ids))
+            first_logits = lm_head(model(position_ids, input_ids=input_ids))
+            next_token = torch.argmax(first_logits[-1], dim=-1, keepdim=True)
+            position_ids = torch.tensor(
+                [prompt_len], device=input_ids.device, dtype=torch.long
+            )
+            _ = lm_head(model(position_ids, input_ids=next_token))
+            model.clear_kv_cache()
     torch.cuda.synchronize()
 
     print("Starting benchmark...")
@@ -70,7 +77,9 @@ def benchmark(
     print(f"  TTFT: {ttft * 1000:.2f} ms")
 
     input_ids = next_token
-    position_ids = torch.tensor([prompt_len], device=input_ids.device, dtype=torch.long)
+    position_ids = torch.tensor(
+        [prompt_len], device=input_ids.device, dtype=torch.long
+    )
 
     token_times = []
     for _ in range(output_len - 1):
