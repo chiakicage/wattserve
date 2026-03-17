@@ -7,12 +7,12 @@ from typing import List, Tuple, Generator
 
 import torch
 import torch.nn as nn
-from safetensors.torch import safe_open
+from safetensors import safe_open
 from transformers import (
     AutoConfig,
     AutoTokenizer,
 )
-from qwen3 import Qwen3Model
+from qwen3 import Qwen3Model, Qwen3Config
 
 _BAR_FORMAT = "{desc}: {percentage:3.0f}% Completed | {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]\n"  # noqa: E501
 
@@ -77,6 +77,10 @@ def main():
 
     print("Loading Config...")
     config = AutoConfig.from_pretrained(args.model)
+    assert isinstance(config, Qwen3Config), "Config type mismatch"
+    assert config.hidden_size is not None
+    assert config.vocab_size is not None
+    assert config.tie_word_embeddings is not None
     # print(config)
 
     print("Creating Model...")

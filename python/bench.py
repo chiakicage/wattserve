@@ -45,6 +45,8 @@ def benchmark(
         model = Qwen3Model(config)
 
     print("Generating random input...")
+    assert config.vocab_size is not None
+    assert config.hidden_size is not None
     input_ids = generate_random_input_ids(prompt_len, config.vocab_size)
     position_ids = torch.arange(prompt_len, device=input_ids.device)
 

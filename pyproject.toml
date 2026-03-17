@@ -97,3 +97,9 @@ docstring-code-line-length = "dynamic"
 dev = [
     "pre-commit>=4.5.1",
 ]
+
+[tool.setuptools]
+py-modules = ["python"]
+
+[tool.pyright]
+extraPaths = ["python"]

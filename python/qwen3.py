@@ -137,6 +137,7 @@ class Qwen3Attention(nn.Module):
         self.cache = KVCache(
             self.num_kv_heads, self.head_dim, self.max_position_embeddings
         )
+        assert config.rms_norm_eps is not None
         self.q_norm = RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = RMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
@@ -178,7 +179,7 @@ class Qwen3Attention(nn.Module):
                 q, k_cache, v_cache, sm_scale=self.scaling
             )
         else:  # Extend
-            pass
+            o = q
 
         o = o.view(-1, self.num_heads * self.head_dim)
         output = self.o_proj(o)
@@ -192,6 +193,10 @@ class Qwen3DecoderLayer(nn.Module):
         layer_idx: int,
     ) -> None:
         super().__init__()
+        assert config.num_attention_heads is not None
+        assert config.hidden_size is not None
+        assert config.intermediate_size is not None
+        assert config.rms_norm_eps is not None
         self.hidden_size = config.hidden_size
         rope_theta = getattr(config, "rope_theta", 10000)
         self.layer_idx = layer_idx
@@ -242,6 +247,7 @@ class Qwen3DecoderLayer(nn.Module):
             hidden_states, residual
         )
         hidden_states = self.mlp(hidden_states)
+        assert residual is not None
         return hidden_states, residual
 
 
@@ -253,7 +259,10 @@ class Qwen3Model(nn.Module):
         super().__init__()
 
         self.config = config
-
+        assert config.num_hidden_layers is not None
+        assert config.hidden_size is not None
+        assert config.vocab_size is not None
+        assert config.rms_norm_eps is not None
         self.vocab_size = config.vocab_size
         self.layer_indices = list(range(config.num_hidden_layers))
         self.layers = nn.ModuleDict()
