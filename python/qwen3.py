@@ -27,16 +27,24 @@ class RMSNorm(nn.Module):
         self,
         hidden_size: int,
         eps: float = 1e-6,
+        replace_ln: bool = False,
     ) -> None:
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
+        self.replace_ln = replace_ln
 
     def forward(
         self,
         x: torch.Tensor,
         residual: Optional[torch.Tensor] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        if self.replace_ln:
+            # if residual is not None:
+            #     x, residual = x + residual, x
+            # else:
+            residual = x
+            return x, residual
         if residual is not None:
             fused_add_rmsnorm(x, residual, self.weight, self.variance_epsilon)
         else:
@@ -88,6 +96,7 @@ class Qwen3Attention(nn.Module):
         layer_idx: int,
         rope_theta: float = 10000,
         max_position_embeddings: int = 8192,
+        replace_ln: bool = False,
     ) -> None:
         super().__init__()
         self.layer_idx = layer_idx
@@ -138,8 +147,12 @@ class Qwen3Attention(nn.Module):
             self.num_kv_heads, self.head_dim, self.max_position_embeddings
         )
         assert config.rms_norm_eps is not None
-        self.q_norm = RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.q_norm = RMSNorm(
+            self.head_dim, eps=config.rms_norm_eps, replace_ln=replace_ln
+        )
+        self.k_norm = RMSNorm(
+            self.head_dim, eps=config.rms_norm_eps, replace_ln=replace_ln
+        )
 
     def forward(
         self,
@@ -191,6 +204,7 @@ class Qwen3DecoderLayer(nn.Module):
         self,
         config: Qwen3Config,
         layer_idx: int,
+        replace_ln: bool = False,
     ) -> None:
         super().__init__()
         assert config.num_attention_heads is not None
@@ -215,6 +229,7 @@ class Qwen3DecoderLayer(nn.Module):
             layer_idx=layer_idx,
             rope_theta=rope_theta,
             max_position_embeddings=max_position_embeddings,
+            replace_ln=replace_ln,
         )
         self.mlp = Qwen3MLP(
             hidden_size=self.hidden_size,
@@ -223,10 +238,12 @@ class Qwen3DecoderLayer(nn.Module):
         self.input_layernorm = RMSNorm(
             config.hidden_size,
             eps=config.rms_norm_eps,
+            replace_ln=replace_ln,
         )
         self.post_attention_layernorm = RMSNorm(
             config.hidden_size,
             eps=config.rms_norm_eps,
+            replace_ln=replace_ln,
         )
 
     def forward(
@@ -255,6 +272,7 @@ class Qwen3Model(nn.Module):
     def __init__(
         self,
         config: Qwen3Config,
+        replace_ln: bool = False,
     ):
         super().__init__()
 
@@ -269,12 +287,14 @@ class Qwen3Model(nn.Module):
         self.norm = RMSNorm(
             config.hidden_size,
             eps=config.rms_norm_eps,
+            replace_ln=replace_ln,
         )
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
         for i in self.layer_indices:
             self.layers[str(i)] = Qwen3DecoderLayer(
                 config=config,
                 layer_idx=i,
+                replace_ln=replace_ln,
             )
 
     def clear_kv_cache(self) -> None:

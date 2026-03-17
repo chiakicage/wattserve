@@ -82,6 +82,33 @@ def get_qwen3_config_14B():
     return config
 
 
+def get_qwen3_config_16B():
+    config = Qwen3Config(
+        vocab_size=151936,
+        hidden_size=5120,
+        intermediate_size=25600,
+        num_hidden_layers=20,
+        num_attention_heads=64,
+        num_key_value_heads=8,
+        head_dim=128,
+        hidden_act="silu",
+        max_position_embeddings=40960,
+        initializer_range=0.02,
+        rms_norm_eps=1e-6,
+        use_cache=True,
+        tie_word_embeddings=False,
+        attention_bias=False,
+        use_sliding_window=False,
+        sliding_window=4096,
+        max_window_layers=32,
+        attention_dropout=0.0,
+        pad_token_id=151643,
+        bos_token_id=151643,
+        eos_token_id=151643,
+    )
+    return config
+
+
 def get_qwen3_config_32B():
     config = Qwen3Config(
         vocab_size=151936,
@@ -116,6 +143,7 @@ if __name__ == "__main__":
         "qwen3_4B": get_qwen3_config_4B().to_dict(),
         "qwen3_8B": get_qwen3_config_8B().to_dict(),
         "qwen3_14B": get_qwen3_config_14B().to_dict(),
+        "qwen3_16B": get_qwen3_config_16B().to_dict(),
         "qwen3_32B": get_qwen3_config_32B().to_dict(),
     }
 
