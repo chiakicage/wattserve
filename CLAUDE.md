@@ -11,7 +11,7 @@ WattServe is an experimental LLM serving and benchmarking repository focused on 
 - GPU power draw and clocks
 - the runtime impact of normalization and other memory-heavy operations
 
-The current repository includes custom Qwen3 and Llama inference paths built on top of FlashInfer kernels. The Llama path now also includes a batch benchmark runner for the `replace_ln` ablation matrix.
+The current repository includes custom Llama inference paths built on top of FlashInfer kernels. The Llama path now also includes a batch benchmark runner for the `replace_ln` ablation matrix.
 
 ## Main Entry Points
 
@@ -23,9 +23,6 @@ The current repository includes custom Qwen3 and Llama inference paths built on 
 - `scripts/benchmarks/README.md`: explains what each benchmark script does and how to run it
 - `python/models/llama.py`: inference-only Llama model using FlashInfer ops
 - `python/models/llama_config.py`: Llama model specs plus parameter / FLOPs / memory estimators
-- `python/bench.py`: Qwen3 benchmark path
-- `python/main.py`: loads HuggingFace Qwen weights and measures TTFT / TPOT
-- `python/models/qwen3.py` and `python/models/qwen3_config.py`: Qwen3 model and config helpers
 - `python/monitor/gpu_monitor.py`: NVML-based power / clock sampling
 - `results/llama_replace_ln_prefill/`: generated batch benchmark outputs, one timestamped directory per run
 - `3rdparty/`: vendored dependencies, notably `flashinfer` and `cutlass`
@@ -115,6 +112,8 @@ Run the batch Llama ablation matrix:
 fish -lc 'source /home/cage/wattserve/.venv/bin/activate.fish; python scripts/benchmarks/run_llama_replace_ln_matrix.py'
 ```
 
+The canonical batch benchmark defaults are `warmup=5`, `repeat=10`, and `monitor_interval=0.01`.
+
 Override the batch output directory:
 
 ```sh
@@ -133,18 +132,6 @@ Re-render and refresh the repo-root benchmark index:
 fish -lc 'source /home/cage/wattserve/.venv/bin/activate.fish; python scripts/benchmarks/render_llama_replace_ln_report.py --output_dir results/llama_replace_ln_prefill/<timestamp> --refresh_root_index'
 ```
 
-Run the Qwen benchmark:
-
-```sh
-fish -lc 'source /home/cage/wattserve/.venv/bin/activate.fish; python python/bench.py --model 4B --prompt_len 4096'
-```
-
-Run the Qwen weight-loading path:
-
-```sh
-fish -lc 'source /home/cage/wattserve/.venv/bin/activate.fish; python python/main.py --model /share/models/Qwen3.5-9B'
-```
-
 ## Runtime Assumptions
 
 - Benchmarks assume CUDA is available and use `cuda:0`.
@@ -152,8 +139,9 @@ fish -lc 'source /home/cage/wattserve/.venv/bin/activate.fish; python python/mai
 - `python/monitor/gpu_monitor.py` depends on NVML via `pynvml` for power and clock measurements.
 - The Llama `34B` and `70B` configs preserve large-model tensor shapes but reduce layer count to fit an A100 40GB persistent-memory budget.
 - `--replace_ln` is an ablation flag, not a numerically equivalent model variant.
+- The canonical single-run and batch benchmark defaults are `warmup=5`, `repeat=10`, and `monitor_interval=0.01`.
 - `LLAMA2_MAX_POSITION_EMBEDDINGS = 16384` is only a positional limit. It does not guarantee that every `prompt_len=16384` benchmark combination will fit or run stably on the current GPU.
-- The standard batch benchmark matrix is now fixed to `512/1024/2048/8192`. `16384` is kept available only as an ad hoc single-run CLI input.
+- The standard batch benchmark matrix is now fixed to `16/32/64/128/256/512/1024/2048/4096/8192`. Prompt lengths outside that set should be treated as ad hoc reference runs.
 - The current A100 40GB fitting logic only constrains persistent weight memory. It does not account for transient activations, intermediate tensors, workspaces, or all runtime allocations.
 - Each canonical benchmark run writes its own `summary.csv`, `metadata.json`, `plots/*.png`, `monitor/*.csv`, and result-local `BENCHMARK.md` inside a timestamped result directory.
 - The batch runner records individual run failures to `summary.csv` and continues with the remaining matrix entries.

@@ -11,13 +11,34 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ROOT_BENCHMARK_INDEX_PATH = REPO_ROOT / "BENCHMARK.md"
 DEFAULT_MODELS = ["7B", "13B", "34B", "70B"]
-DEFAULT_PROMPT_LENGTHS = [512, 1024, 2048, 8192]
+DEFAULT_PROMPT_LENGTHS = [
+    16,
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024,
+    2048,
+    4096,
+    8192,
+]
 DEFAULT_VARIANTS = ["baseline", "replace_ln"]
 PLOT_METRICS = [
-    ("ttft_ms", "TTFT (ms)"),
+    ("prefill_tflops_s", "Prefill TFLOPs/s"),
     ("avg_power_watts", "Avg Power (W)"),
     ("avg_gpu_clock_mhz", "Avg GPU Clock (MHz)"),
 ]
+METRIC_AXIS_CONFIG = {
+    "avg_power_watts": {
+        "ylim": (-10, 410),
+        "yticks": [0, 100, 200, 300, 400],
+    },
+    "avg_gpu_clock_mhz": {
+        "ylim": (1050, 1450),
+        "yticks": [1100, 1200, 1300, 1400],
+    },
+}
 
 
 def _utc_now_iso() -> str:
@@ -29,6 +50,10 @@ def _display_path(path: Path) -> str:
         return path.relative_to(REPO_ROOT).as_posix()
     except ValueError:
         return str(path)
+
+
+def _prompt_lengths_display(prompt_lengths: list[int]) -> str:
+    return "/".join(str(prompt_len) for prompt_len in prompt_lengths)
 
 
 def _sort_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -173,6 +198,22 @@ def _configure_prompt_len_axis(axis: Any) -> None:
     )
 
 
+def configure_metric_axis(axis: Any, metric_name: str) -> None:
+    config = METRIC_AXIS_CONFIG.get(metric_name, {})
+
+    yscale = config.get("yscale")
+    if yscale is not None:
+        axis.set_yscale(yscale)
+
+    ylim = config.get("ylim")
+    if ylim is not None:
+        axis.set_ylim(*ylim)
+
+    yticks = config.get("yticks")
+    if yticks is not None:
+        axis.set_yticks(yticks)
+
+
 def generate_metric_plots(
     rows: list[dict[str, Any]],
     plots_dir: Path,
@@ -239,6 +280,7 @@ def generate_metric_plots(
             axis.set_xlabel("Prompt Len")
             axis.set_ylabel(y_label)
             _configure_prompt_len_axis(axis)
+            configure_metric_axis(axis, metric_name)
             axis.grid(True, alpha=0.3)
 
         if any_data:
@@ -257,6 +299,66 @@ def generate_metric_plots(
         created_paths.append(output_path)
 
     return created_paths
+
+
+def generate_tflops_uplift_plot(
+    rows: list[dict[str, Any]],
+    plots_dir: Path,
+) -> Path:
+    import matplotlib
+
+    matplotlib.use("Agg")
+
+    import matplotlib.pyplot as plt
+
+    paired_rows = _pair_success_rows(rows)
+    plots_dir.mkdir(parents=True, exist_ok=True)
+
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10), constrained_layout=True)
+
+    for axis, model in zip(axes.flat, DEFAULT_MODELS):
+        model_pairs = [
+            pair for pair in paired_rows if pair[0]["model"] == model
+        ]
+        x_values = [int(baseline["prompt_len"]) for baseline, _ in model_pairs]
+        uplift_values = [
+            _percentage_delta(
+                baseline["prefill_tflops_s"], replace["prefill_tflops_s"]
+            )
+            for baseline, replace in model_pairs
+        ]
+
+        if x_values and all(value is not None for value in uplift_values):
+            axis.plot(
+                x_values,
+                [float(value) for value in uplift_values if value is not None],
+                marker="o",
+                linewidth=2,
+                color="#2ca02c",
+            )
+            axis.axhline(0.0, color="#7f7f7f", linewidth=1, linestyle="--")
+        else:
+            axis.text(
+                0.5,
+                0.5,
+                "No paired data",
+                ha="center",
+                va="center",
+                transform=axis.transAxes,
+            )
+
+        axis.set_title(f"Llama-{model}")
+        axis.set_xlabel("Prompt Len")
+        axis.set_ylabel("TFLOPs Uplift (%)")
+        _configure_prompt_len_axis(axis)
+        axis.grid(True, alpha=0.3)
+
+    fig.suptitle("Llama replace_ln: TFLOPs uplift vs baseline", fontsize=16)
+
+    output_path = plots_dir / "prefill_tflops_uplift_pct.png"
+    fig.savefig(output_path, dpi=160, bbox_inches="tight")
+    plt.close(fig)
+    return output_path
 
 
 def build_result_benchmark_markdown(
@@ -282,13 +384,17 @@ def build_result_benchmark_markdown(
         "",
         "## Summary",
         "",
-        "- Standard matrix: `7B/13B/34B/70B` x `512/1024/2048/8192` x `baseline/replace_ln`",
+        (
+            "- Standard matrix: "
+            f"`7B/13B/34B/70B` x `{_prompt_lengths_display(DEFAULT_PROMPT_LENGTHS)}` "
+            "x `baseline/replace_ln`"
+        ),
         f"- Result directory: `{output_dir_display}`",
         f"- Summary CSV: `{summary_csv_display}`",
         f"- Metadata: `{metadata_display}`",
         f"- Plots directory: `{plots_dir_display}`",
         "- `--replace_ln` is an ablation flag, not a numerically equivalent model variant.",
-        "- `16384` has been removed from the standard benchmark matrix because it is not reliable on the current setup.",
+        "- Prompt lengths outside the standard matrix are excluded from the summary tables and plots in this report.",
     ]
 
     if excluded_prompt_lengths:
@@ -296,7 +402,7 @@ def build_result_benchmark_markdown(
             str(length) for length in excluded_prompt_lengths
         )
         lines.append(
-            f"- Historical prompt lengths excluded from this report and plots: `{excluded_display}`"
+            f"- Non-standard prompt lengths excluded from this report and plots: `{excluded_display}`"
         )
 
     lines.extend(
@@ -312,9 +418,13 @@ def build_result_benchmark_markdown(
             "",
             "## Plots",
             "",
-            "### TTFT",
+            "### Prefill TFLOPs/s",
             "",
-            "![TTFT](plots/ttft_ms.png)",
+            "![Prefill TFLOPs/s](plots/prefill_tflops_s.png)",
+            "",
+            "### TFLOPs Uplift vs Baseline",
+            "",
+            "![TFLOPs Uplift vs Baseline](plots/prefill_tflops_uplift_pct.png)",
             "",
             "### Avg Power",
             "",
@@ -415,12 +525,12 @@ def build_root_index_markdown(
         "This file indexes the latest canonical Llama benchmark report.",
         "",
         f"- Latest result directory: `{latest_dir_display}`",
-        f"- Standard prompt lengths: `{'/'.join(str(prompt_len) for prompt_len in DEFAULT_PROMPT_LENGTHS)}`",
+        f"- Standard prompt lengths: `{_prompt_lengths_display(DEFAULT_PROMPT_LENGTHS)}`",
         f"- Latest report: [{_display_path(report_path)}]({_display_path(report_path)})",
         f"- Latest summary CSV: [{_display_path(summary_path)}]({_display_path(summary_path)})",
         f"- Latest metadata: [{_display_path(metadata_path)}]({_display_path(metadata_path)})",
         f"- Latest plots directory: `{_display_path(plots_dir)}`",
-        "- `16384` is no longer part of the standard benchmark matrix. Older result directories may still contain historical `16384` rows and should be treated as non-canonical reference data.",
+        "- Prompt lengths outside the standard matrix may still appear in older result directories and should be treated as non-canonical reference data.",
     ]
 
     if metadata.get("run_started_at_utc"):
@@ -459,6 +569,7 @@ def render_result_report(
     rows = load_summary_rows(summary_csv_path)
     metadata = load_metadata(metadata_path)
     plot_paths = generate_metric_plots(rows, plots_dir)
+    plot_paths.append(generate_tflops_uplift_plot(rows, plots_dir))
 
     metadata["benchmark_markdown"] = str(benchmark_md_path)
     metadata["plots_dir"] = str(plots_dir)

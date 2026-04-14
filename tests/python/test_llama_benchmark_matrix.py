@@ -1,16 +1,56 @@
 import csv
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.benchmarks.render_llama_replace_ln_report import (
+import matplotlib
+
+matplotlib.use("Agg")
+
+
+def _load_test_modules():
+    repo_root = Path(__file__).resolve().parents[2]
+    python_dir = repo_root / "python"
+    if str(python_dir) not in sys.path:
+        sys.path.insert(0, str(python_dir))
+
+    import bench_llama
+    import matplotlib.pyplot as plt
+    from scripts.benchmarks.render_llama_replace_ln_report import (
+        configure_metric_axis,
+        render_result_report,
+    )
+    from scripts.benchmarks.run_llama_replace_ln_matrix import (
+        DEFAULT_PROMPT_LENGTHS,
+        DEFAULT_REPEAT,
+        DEFAULT_WARMUP,
+        write_summary_csv,
+    )
+
+    return (
+        bench_llama,
+        plt,
+        configure_metric_axis,
+        render_result_report,
+        DEFAULT_PROMPT_LENGTHS,
+        DEFAULT_REPEAT,
+        DEFAULT_WARMUP,
+        write_summary_csv,
+    )
+
+
+(
+    bench_llama,
+    plt,
+    configure_metric_axis,
     render_result_report,
-)
-from scripts.benchmarks.run_llama_replace_ln_matrix import (
     DEFAULT_PROMPT_LENGTHS,
+    DEFAULT_REPEAT,
+    DEFAULT_WARMUP,
     write_summary_csv,
-)
+) = _load_test_modules()
 
 
 class TestLlamaBenchmarkMatrix(unittest.TestCase):
@@ -39,8 +79,8 @@ class TestLlamaBenchmarkMatrix(unittest.TestCase):
             "parameter_count": 13000000000,
             "parameter_count_with_lm_head": 13300000000,
             "estimated_runtime_memory_gib": 24.0,
-            "warmup": 3,
-            "repeat": 5,
+            "warmup": 5,
+            "repeat": 10,
             "ttft_ms": 480.0,
             "prefill_tflops_s": 240.0,
             "avg_power_watts": 390.0,
@@ -53,8 +93,42 @@ class TestLlamaBenchmarkMatrix(unittest.TestCase):
         row.update(overrides)
         return row
 
-    def test_runner_defaults_exclude_16384(self) -> None:
-        self.assertEqual(DEFAULT_PROMPT_LENGTHS, [512, 1024, 2048, 8192])
+    def test_runner_defaults_use_new_prompt_matrix(self) -> None:
+        self.assertEqual(
+            DEFAULT_PROMPT_LENGTHS,
+            [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192],
+        )
+        self.assertEqual(DEFAULT_WARMUP, 5)
+        self.assertEqual(DEFAULT_REPEAT, 10)
+        self.assertEqual(bench_llama.DEFAULT_WARMUP, 5)
+        self.assertEqual(bench_llama.DEFAULT_REPEAT, 10)
+
+    def test_metric_axis_configuration(self) -> None:
+        fig, axes = plt.subplots(1, 3)
+        try:
+            configure_metric_axis(axes[0], "ttft_ms")
+            configure_metric_axis(axes[1], "avg_power_watts")
+            configure_metric_axis(axes[2], "avg_gpu_clock_mhz")
+
+            self.assertEqual(axes[0].get_yscale(), "linear")
+            self.assertEqual(
+                tuple(int(value) for value in axes[1].get_ylim()),
+                (-10, 410),
+            )
+            self.assertEqual(
+                [int(value) for value in axes[1].get_yticks()],
+                [0, 100, 200, 300, 400],
+            )
+            self.assertEqual(
+                tuple(int(value) for value in axes[2].get_ylim()),
+                (1050, 1450),
+            )
+            self.assertEqual(
+                [int(value) for value in axes[2].get_yticks()],
+                [1100, 1200, 1300, 1400],
+            )
+        finally:
+            plt.close(fig)
 
     def test_write_summary_csv_includes_success_and_failure_rows(self) -> None:
         rows = [
@@ -144,10 +218,22 @@ class TestLlamaBenchmarkMatrix(unittest.TestCase):
                 json.dumps(
                     {
                         "run_started_at_utc": "2026-04-14T00:00:00Z",
-                        "warmup": 3,
-                        "repeat": 5,
+                        "warmup": 5,
+                        "repeat": 10,
                         "monitor_interval": 0.01,
-                        "prompt_lengths": [512, 1024, 2048, 8192, 16384],
+                        "prompt_lengths": [
+                            16,
+                            32,
+                            64,
+                            128,
+                            256,
+                            512,
+                            1024,
+                            2048,
+                            4096,
+                            8192,
+                            16384,
+                        ],
                         "environment": {
                             "python_version": "3.13.2",
                             "torch_version": "2.11.0+cu130",
@@ -170,7 +256,14 @@ class TestLlamaBenchmarkMatrix(unittest.TestCase):
             root_index_md = root_index_path.read_text()
             metadata = json.loads(metadata_path.read_text())
 
-            self.assertIn("![TTFT](plots/ttft_ms.png)", benchmark_md)
+            self.assertIn(
+                "![Prefill TFLOPs/s](plots/prefill_tflops_s.png)",
+                benchmark_md,
+            )
+            self.assertIn(
+                "![TFLOPs Uplift vs Baseline](plots/prefill_tflops_uplift_pct.png)",
+                benchmark_md,
+            )
             self.assertIn(
                 "![Avg Power](plots/avg_power_watts.png)", benchmark_md
             )
@@ -178,7 +271,7 @@ class TestLlamaBenchmarkMatrix(unittest.TestCase):
                 "![Avg GPU Clock](plots/avg_gpu_clock_mhz.png)", benchmark_md
             )
             self.assertIn(
-                "Historical prompt lengths excluded from this report and plots: `16384`",
+                "Non-standard prompt lengths excluded from this report and plots: `16384`",
                 benchmark_md,
             )
             self.assertIn(
@@ -187,16 +280,25 @@ class TestLlamaBenchmarkMatrix(unittest.TestCase):
             self.assertIn("## Unpaired Successful Runs", benchmark_md)
             self.assertIn("| 34B | 2048 | baseline |", benchmark_md)
             self.assertIn(
-                "Standard prompt lengths: `512/1024/2048/8192`", root_index_md
+                "Standard prompt lengths: `16/32/64/128/256/512/1024/2048/4096/8192`",
+                root_index_md,
+            )
+            self.assertIn(
+                "- Warmup / repeat / monitor interval: `5` / `10` / `0.01`",
+                benchmark_md,
             )
             self.assertIn("results/run1/BENCHMARK.md", root_index_md)
             self.assertEqual(
-                metadata["report_prompt_lengths"], [512, 1024, 2048, 8192]
+                metadata["report_prompt_lengths"],
+                [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192],
             )
             self.assertEqual(metadata["excluded_prompt_lengths"], [16384])
+            self.assertEqual(metadata["warmup"], 5)
+            self.assertEqual(metadata["repeat"], 10)
 
             for plot_name in [
-                "ttft_ms.png",
+                "prefill_tflops_s.png",
+                "prefill_tflops_uplift_pct.png",
                 "avg_power_watts.png",
                 "avg_gpu_clock_mhz.png",
             ]:

@@ -26,7 +26,21 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PYTHON_DIR = REPO_ROOT / "python"
 DEFAULT_RESULTS_ROOT = REPO_ROOT / "results" / "llama_replace_ln_prefill"
 DEFAULT_MODELS = ["7B", "13B", "34B", "70B"]
-DEFAULT_PROMPT_LENGTHS = [512, 1024, 2048, 8192]
+DEFAULT_PROMPT_LENGTHS = [
+    16,
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024,
+    2048,
+    4096,
+    8192,
+]
+DEFAULT_WARMUP = 5
+DEFAULT_REPEAT = 10
+DEFAULT_MONITOR_INTERVAL = 0.01
 DEFAULT_VARIANTS = [
     ("baseline", False),
     ("replace_ln", True),
@@ -248,19 +262,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--warmup",
         type=int,
-        default=3,
+        default=DEFAULT_WARMUP,
         help="Number of warmup iterations per benchmark.",
     )
     parser.add_argument(
         "--repeat",
         type=int,
-        default=5,
+        default=DEFAULT_REPEAT,
         help="Number of timed iterations per benchmark.",
     )
     parser.add_argument(
         "--monitor_interval",
         type=float,
-        default=0.01,
+        default=DEFAULT_MONITOR_INTERVAL,
         help="GPU monitor sampling interval in seconds.",
     )
     parser.add_argument(
