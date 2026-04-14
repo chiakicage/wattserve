@@ -2,13 +2,13 @@ import time
 import argparse
 
 import torch
-from qwen3_config import (
+from models.qwen3_config import (
     get_qwen3_config_4B,
     get_qwen3_config_8B,
     get_qwen3_config_16B,
     get_qwen3_config_32B,
 )
-from qwen3 import Qwen3Model
+from models.qwen3 import Qwen3Model
 from monitor.gpu_monitor import GPUMonitor
 
 

@@ -12,7 +12,7 @@ from transformers import (
     AutoConfig,
     AutoTokenizer,
 )
-from qwen3 import Qwen3Model, Qwen3Config
+from models.qwen3 import Qwen3Model, Qwen3Config
 
 _BAR_FORMAT = "{desc}: {percentage:3.0f}% Completed | {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]\n"  # noqa: E501
 

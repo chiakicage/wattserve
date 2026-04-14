@@ -6,15 +6,12 @@ import torch
 from torch import nn
 from transformers import LlamaConfig
 
-from cache import KVCache
-
 from flashinfer import (
     silu_and_mul,
     fused_add_rmsnorm,
     rmsnorm,
     apply_rope_pos_ids,
     single_prefill_with_kv_cache,
-    single_decode_with_kv_cache,
 )
 
 __all__ = [
@@ -90,13 +87,10 @@ class LlamaAttention(nn.Module):
         hidden_size: int,
         num_heads: int,
         num_kv_heads: int,
-        layer_idx: int,
         rope_theta: float = 10000,
-        max_position_embeddings: int = 4096,
         replace_ln: bool = False,
     ) -> None:
         super().__init__()
-        self.layer_idx = layer_idx
         self.hidden_size = hidden_size
         self.num_heads = num_heads
         self.num_kv_heads = num_kv_heads
@@ -109,7 +103,6 @@ class LlamaAttention(nn.Module):
         self.kv_size = self.num_kv_heads * self.head_dim
         self.scaling = self.head_dim**-0.5
         self.rope_theta = rope_theta
-        self.max_position_embeddings = max_position_embeddings
 
         self.q_proj = nn.Linear(
             hidden_size,
@@ -132,9 +125,6 @@ class LlamaAttention(nn.Module):
             bias=False,
         )
 
-        self.cache = KVCache(
-            self.num_kv_heads, self.head_dim, self.max_position_embeddings
-        )
         assert config.rms_norm_eps is not None
         self.q_norm = RMSNorm(
             self.head_dim, eps=config.rms_norm_eps, replace_ln=replace_ln
@@ -163,25 +153,9 @@ class LlamaAttention(nn.Module):
             rotary_dim=self.head_dim,
             rope_theta=self.rope_theta,
         )
-        old_cache_len = self.cache.cur_seq_len
-        input_len = q.shape[0]
-        self.cache.store_kv_cache(k, v)
-
-        if old_cache_len == 0:
-            o = single_prefill_with_kv_cache(
-                q, k, v, causal=True, sm_scale=self.scaling
-            )
-        elif input_len == 1:
-            k_cache, v_cache = self.cache.get_kv_cache(self.layer_idx)
-            assert k_cache is not None
-            assert v_cache is not None
-            q = q.view(self.num_heads, self.head_dim)
-            o = single_decode_with_kv_cache(
-                q, k_cache, v_cache, sm_scale=self.scaling
-            )
-        else:
-            o = q
-
+        o = single_prefill_with_kv_cache(
+            q, k, v, causal=True, sm_scale=self.scaling
+        )
         o = o.view(-1, self.q_size)
         output = self.o_proj(o)
         return output
@@ -203,10 +177,6 @@ class LlamaDecoderLayer(nn.Module):
         rope_theta = getattr(config, "rope_theta", 10000)
         self.layer_idx = layer_idx
 
-        max_position_embeddings = getattr(
-            config, "max_position_embeddings", 4096
-        )
-
         self.self_attn = LlamaAttention(
             config=config,
             hidden_size=self.hidden_size,
@@ -214,9 +184,7 @@ class LlamaDecoderLayer(nn.Module):
             num_kv_heads=getattr(
                 config, "num_key_value_heads", config.num_attention_heads
             ),
-            layer_idx=layer_idx,
             rope_theta=rope_theta,
-            max_position_embeddings=max_position_embeddings,
             replace_ln=replace_ln,
         )
         self.mlp = LlamaMLP(
@@ -284,9 +252,8 @@ class LlamaModel(nn.Module):
             )
 
     def clear_kv_cache(self) -> None:
-        for layer in self.layers.values():
-            assert isinstance(layer, LlamaDecoderLayer)
-            layer.self_attn.cache.clear_kv_cache()
+        # TTFT-only benchmarking does not keep KV cache state.
+        return None
 
     def forward(
         self,
