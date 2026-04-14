@@ -1,10 +1,14 @@
 import csv
+import json
 import tempfile
 import unittest
 from pathlib import Path
 
+from scripts.benchmarks.render_llama_replace_ln_report import (
+    render_result_report,
+)
 from scripts.benchmarks.run_llama_replace_ln_matrix import (
-    build_benchmark_markdown,
+    DEFAULT_PROMPT_LENGTHS,
     write_summary_csv,
 )
 
@@ -49,12 +53,15 @@ class TestLlamaBenchmarkMatrix(unittest.TestCase):
         row.update(overrides)
         return row
 
-    def test_write_summary_csv_includes_success_and_failure_rows(self):
+    def test_runner_defaults_exclude_16384(self) -> None:
+        self.assertEqual(DEFAULT_PROMPT_LENGTHS, [512, 1024, 2048, 8192])
+
+    def test_write_summary_csv_includes_success_and_failure_rows(self) -> None:
         rows = [
-            self._make_row("13B", 4096, "baseline", "ok"),
+            self._make_row("13B", 2048, "baseline", "ok"),
             self._make_row(
                 "13B",
-                4096,
+                2048,
                 "replace_ln",
                 "error",
                 error_type="RuntimeError",
@@ -85,9 +92,7 @@ class TestLlamaBenchmarkMatrix(unittest.TestCase):
         self.assertEqual(written_rows[1]["error_type"], "RuntimeError")
         self.assertEqual(written_rows[1]["error_message"], "CUDA out of memory")
 
-    def test_build_benchmark_markdown_pairs_failures_and_unpaired_successes(
-        self,
-    ):
+    def test_render_result_report_generates_plots_and_indices(self) -> None:
         rows = [
             self._make_row("7B", 512, "baseline", "ok", ttft_ms=100.0),
             self._make_row(
@@ -102,7 +107,7 @@ class TestLlamaBenchmarkMatrix(unittest.TestCase):
             ),
             self._make_row(
                 "13B",
-                16384,
+                8192,
                 "baseline",
                 "error",
                 error_type="OutOfMemoryError",
@@ -116,39 +121,88 @@ class TestLlamaBenchmarkMatrix(unittest.TestCase):
                 monitor_sample_count=0,
                 monitor_csv="",
             ),
-            self._make_row("34B", 8192, "baseline", "ok"),
+            self._make_row("34B", 2048, "baseline", "ok"),
+            self._make_row(
+                "34B",
+                16384,
+                "baseline",
+                "ok",
+                ttft_ms=3000.0,
+            ),
         ]
-        metadata = {
-            "warmup": 3,
-            "repeat": 5,
-            "monitor_interval": 0.01,
-            "environment": {
-                "python_version": "3.13.2",
-                "torch_version": "2.11.0+cu130",
-                "cuda_available": True,
-                "cuda_device_name": "NVIDIA A100 40GB",
-            },
-        }
 
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
-            markdown = build_benchmark_markdown(
-                rows=rows,
-                run_started_at_utc="2026-04-14T00:00:00Z",
-                output_dir=temp_path / "results" / "run1",
-                summary_csv_path=temp_path / "results" / "run1" / "summary.csv",
-                metadata=metadata,
+            output_dir = temp_path / "results" / "run1"
+            output_dir.mkdir(parents=True)
+            summary_csv_path = output_dir / "summary.csv"
+            metadata_path = output_dir / "metadata.json"
+            root_index_path = temp_path / "BENCHMARK.md"
+
+            write_summary_csv(rows, summary_csv_path)
+            metadata_path.write_text(
+                json.dumps(
+                    {
+                        "run_started_at_utc": "2026-04-14T00:00:00Z",
+                        "warmup": 3,
+                        "repeat": 5,
+                        "monitor_interval": 0.01,
+                        "prompt_lengths": [512, 1024, 2048, 8192, 16384],
+                        "environment": {
+                            "python_version": "3.13.2",
+                            "torch_version": "2.11.0+cu130",
+                            "cuda_available": True,
+                            "cuda_device_name": "NVIDIA A100 40GB",
+                        },
+                    },
+                    indent=2,
+                )
+                + "\n"
             )
 
-        self.assertIn("# Llama `replace_ln` Benchmark", markdown)
-        self.assertIn("| 7B | 512 | 240.00 | 110.00 | -54.17% |", markdown)
-        self.assertIn("| 13B | 16384 | baseline | OutOfMemoryError |", markdown)
-        self.assertIn("## Unpaired Successful Runs", markdown)
-        self.assertIn("| 34B | 8192 | baseline |", markdown)
-        self.assertIn(
-            "`LLAMA2_MAX_POSITION_EMBEDDINGS = 16384` is only a position-length limit.",
-            markdown,
-        )
+            render_result_report(
+                output_dir=output_dir,
+                refresh_root_index=True,
+                root_index_path=root_index_path,
+            )
+
+            benchmark_md = (output_dir / "BENCHMARK.md").read_text()
+            root_index_md = root_index_path.read_text()
+            metadata = json.loads(metadata_path.read_text())
+
+            self.assertIn("![TTFT](plots/ttft_ms.png)", benchmark_md)
+            self.assertIn(
+                "![Avg Power](plots/avg_power_watts.png)", benchmark_md
+            )
+            self.assertIn(
+                "![Avg GPU Clock](plots/avg_gpu_clock_mhz.png)", benchmark_md
+            )
+            self.assertIn(
+                "Historical prompt lengths excluded from this report and plots: `16384`",
+                benchmark_md,
+            )
+            self.assertIn(
+                "| 13B | 8192 | baseline | OutOfMemoryError |", benchmark_md
+            )
+            self.assertIn("## Unpaired Successful Runs", benchmark_md)
+            self.assertIn("| 34B | 2048 | baseline |", benchmark_md)
+            self.assertIn(
+                "Standard prompt lengths: `512/1024/2048/8192`", root_index_md
+            )
+            self.assertIn("results/run1/BENCHMARK.md", root_index_md)
+            self.assertEqual(
+                metadata["report_prompt_lengths"], [512, 1024, 2048, 8192]
+            )
+            self.assertEqual(metadata["excluded_prompt_lengths"], [16384])
+
+            for plot_name in [
+                "ttft_ms.png",
+                "avg_power_watts.png",
+                "avg_gpu_clock_mhz.png",
+            ]:
+                plot_path = output_dir / "plots" / plot_name
+                self.assertTrue(plot_path.exists())
+                self.assertGreater(plot_path.stat().st_size, 0)
 
 
 if __name__ == "__main__":
