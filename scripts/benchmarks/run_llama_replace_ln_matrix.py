@@ -280,7 +280,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--skip_root_index",
         action="store_true",
-        help="Do not refresh the repo-root BENCHMARK.md index.",
+        help=(
+            "Do not refresh the repo-root BENCHMARK.md index or republish "
+            "the git-tracked latest snapshot."
+        ),
     )
     return parser
 

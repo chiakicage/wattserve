@@ -2,4 +2,8 @@
 __pycache__
 build/
 .ruff_cache/
-results/
+results/*
+!results/llama_replace_ln_prefill/
+results/llama_replace_ln_prefill/*
+!results/llama_replace_ln_prefill/latest/
+!results/llama_replace_ln_prefill/latest/**

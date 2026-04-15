@@ -1,0 +1,71 @@
+{
+  "run_started_at_utc": "2026-04-14T17:55:22.057389Z",
+  "output_dir": "/home/cage/wattserve/results/llama_replace_ln_prefill/latest",
+  "summary_csv": "/home/cage/wattserve/results/llama_replace_ln_prefill/latest/summary.csv",
+  "benchmark_markdown": "/home/cage/wattserve/results/llama_replace_ln_prefill/latest/BENCHMARK.md",
+  "plots_dir": "/home/cage/wattserve/results/llama_replace_ln_prefill/latest/plots",
+  "models": [
+    "7B",
+    "13B",
+    "34B",
+    "70B"
+  ],
+  "prompt_lengths": [
+    16,
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024,
+    2048,
+    4096,
+    8192
+  ],
+  "variants": [
+    "baseline",
+    "replace_ln"
+  ],
+  "warmup": 5,
+  "repeat": 10,
+  "monitor_interval": 0.01,
+  "environment": {
+    "python_version": "3.13.2",
+    "platform": "Linux-5.15.0-164-generic-x86_64-with-glibc2.35",
+    "torch_version": "2.11.0+cu130",
+    "cuda_available": true,
+    "cuda_device_name": "NVIDIA A100-SXM4-40GB",
+    "cuda_device_count": 7,
+    "flashinfer_version": "0.6.7.post3",
+    "transformers_version": "5.5.3"
+  },
+  "run_completed_at_utc": "2026-04-14T17:59:32.947571Z",
+  "row_count": 80,
+  "success_count": 80,
+  "failure_count": 0,
+  "plot_files": [
+    "/home/cage/wattserve/results/llama_replace_ln_prefill/latest/plots/prefill_tflops_s.png",
+    "/home/cage/wattserve/results/llama_replace_ln_prefill/latest/plots/avg_power_watts.png",
+    "/home/cage/wattserve/results/llama_replace_ln_prefill/latest/plots/avg_gpu_clock_mhz.png",
+    "/home/cage/wattserve/results/llama_replace_ln_prefill/latest/plots/prefill_tflops_uplift_pct.png"
+  ],
+  "report_prompt_lengths": [
+    16,
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024,
+    2048,
+    4096,
+    8192
+  ],
+  "excluded_prompt_lengths": [],
+  "render_generated_at_utc": "2026-04-15T08:20:14.653686Z",
+  "source_output_dir": "/home/cage/wattserve/results/llama_replace_ln_prefill/20260414T175515Z",
+  "source_summary_csv": "/home/cage/wattserve/results/llama_replace_ln_prefill/20260414T175515Z/summary.csv",
+  "source_metadata_json": "/home/cage/wattserve/results/llama_replace_ln_prefill/20260414T175515Z/metadata.json",
+  "published_snapshot_dir": "/home/cage/wattserve/results/llama_replace_ln_prefill/latest",
+  "published_snapshot_generated_at_utc": "2026-04-15T08:20:12.529327Z"
+}

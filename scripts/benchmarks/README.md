@@ -2,8 +2,8 @@
 
 ## Files
 
-- `run_llama_replace_ln_matrix.py`: runs the fixed Llama prefill benchmark matrix for `7B/13B/34B/70B`, `16/32/64/128/256/512/1024/2048/4096/8192`, and `baseline/replace_ln`; writes `summary.csv`, `metadata.json`, `monitor/*.csv`, `plots/*.png`, and `BENCHMARK.md` inside `results/llama_replace_ln_prefill/<timestamp>/`; refreshes the repo-root `BENCHMARK.md` index by default.
-- `render_llama_replace_ln_report.py`: renders `plots/*.png` and the result-local `BENCHMARK.md` from an existing result directory or `summary.csv`; optionally refreshes the repo-root `BENCHMARK.md` index.
+- `run_llama_replace_ln_matrix.py`: runs the fixed Llama prefill benchmark matrix for `7B/13B/34B/70B`, `16/32/64/128/256/512/1024/2048/4096/8192`, and `baseline/replace_ln`; writes `summary.csv`, `metadata.json`, `monitor/*.csv`, `plots/*.png`, and `BENCHMARK.md` inside `results/llama_replace_ln_prefill/<timestamp>/`; refreshes the repo-root `BENCHMARK.md` index and republishes the git-tracked `results/llama_replace_ln_prefill/latest/` snapshot by default.
+- `render_llama_replace_ln_report.py`: renders `plots/*.png` and the result-local `BENCHMARK.md` from an existing result directory or `summary.csv`; when `--refresh_root_index` is set, it also republishes the git-tracked `results/llama_replace_ln_prefill/latest/` snapshot.
 - `run_llama_component_ablation_matrix.py`: runs the fixed Llama component ablation matrix for `7B/13B/34B/70B`, `16/32/64/128/256/512/1024/2048/4096/8192`, and `baseline/replace_ln/replace_attention/replace_rope/replace_activation`; writes `summary.csv`, `metadata.json`, `monitor/*.csv`, `plots/*.png`, and `BENCHMARK.md` inside `results/llama_component_ablation_prefill/<timestamp>/`; refreshes the repo-root `BENCHMARK_COMPONENT_ABLATION.md` index by default.
 - `render_llama_component_ablation_report.py`: renders `plots/*.png` and the result-local `BENCHMARK.md` from an existing component ablation result directory or `summary.csv`; optionally refreshes the repo-root `BENCHMARK_COMPONENT_ABLATION.md` index.
 
@@ -41,7 +41,7 @@ Re-render plots and the local report for an existing result directory:
 fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python scripts/benchmarks/render_llama_replace_ln_report.py --output_dir results/llama_replace_ln_prefill/<timestamp>'
 ```
 
-Re-render and refresh the repo-root index:
+Re-render, refresh the repo-root index, and republish the git-tracked latest snapshot:
 
 ```sh
 fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python scripts/benchmarks/render_llama_replace_ln_report.py --output_dir results/llama_replace_ln_prefill/<timestamp> --refresh_root_index'

@@ -3,6 +3,7 @@
 import argparse
 import csv
 import json
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,9 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ROOT_BENCHMARK_INDEX_PATH = REPO_ROOT / "BENCHMARK.md"
+GIT_TRACKED_LATEST_RESULTS_PATH = (
+    REPO_ROOT / "results" / "llama_replace_ln_prefill" / "latest"
+)
 DEFAULT_MODELS = ["7B", "13B", "34B", "70B"]
 DEFAULT_PROMPT_LENGTHS = [
     16,
@@ -446,6 +450,10 @@ def build_result_benchmark_markdown(
     output_dir_display = _display_path(output_dir)
     summary_csv_display = _display_path(output_dir / "summary.csv")
     metadata_display = _display_path(output_dir / "metadata.json")
+    source_output_dir = metadata.get("source_output_dir")
+    source_output_dir_display = None
+    if source_output_dir:
+        source_output_dir_display = _display_path(Path(source_output_dir))
     environment = metadata.get("environment", {})
     device_name = environment.get("cuda_device_name", "n/a")
 
@@ -468,6 +476,15 @@ def build_result_benchmark_markdown(
         "- `--replace_ln` is an ablation flag, not a numerically equivalent model variant.",
         "- Prompt lengths outside the standard matrix are excluded from the summary tables and plots in this report.",
     ]
+
+    if (
+        source_output_dir_display is not None
+        and source_output_dir_display != output_dir_display
+    ):
+        lines.append(f"- Source run directory: `{source_output_dir_display}`")
+        lines.append(
+            "- This directory is the git-tracked latest snapshot of that source run."
+        )
 
     if excluded_prompt_lengths:
         excluded_display = "/".join(
@@ -586,6 +603,10 @@ def build_root_index_markdown(
     metadata: dict[str, Any],
 ) -> str:
     latest_dir_display = _display_path(latest_output_dir)
+    source_output_dir = metadata.get("source_output_dir")
+    source_dir_display = None
+    if source_output_dir:
+        source_dir_display = _display_path(Path(source_output_dir))
     report_path = latest_output_dir / "BENCHMARK.md"
     summary_path = latest_output_dir / "summary.csv"
     metadata_path = latest_output_dir / "metadata.json"
@@ -594,9 +615,9 @@ def build_root_index_markdown(
     lines = [
         "# Latest Llama `replace_ln` Benchmark",
         "",
-        "This file indexes the latest canonical Llama benchmark report.",
+        "This file indexes the latest canonical Llama benchmark snapshot tracked in git.",
         "",
-        f"- Latest result directory: `{latest_dir_display}`",
+        f"- Git-tracked latest snapshot: `{latest_dir_display}`",
         f"- Standard prompt lengths: `{_prompt_lengths_display(DEFAULT_PROMPT_LENGTHS)}`",
         f"- Latest report: [{_display_path(report_path)}]({_display_path(report_path)})",
         f"- Latest summary CSV: [{_display_path(summary_path)}]({_display_path(summary_path)})",
@@ -605,12 +626,88 @@ def build_root_index_markdown(
         "- Prompt lengths outside the standard matrix may still appear in older result directories and should be treated as non-canonical reference data.",
     ]
 
+    if (
+        source_dir_display is not None
+        and source_dir_display != latest_dir_display
+    ):
+        lines.append(f"- Source run directory: `{source_dir_display}`")
+
     if metadata.get("run_started_at_utc"):
         lines.append(
             f"- Latest benchmark run started at: `{metadata['run_started_at_utc']}`"
         )
 
     return "\n".join(lines) + "\n"
+
+
+def publish_git_tracked_latest_snapshot(
+    source_output_dir: Path,
+    root_index_path: Path = ROOT_BENCHMARK_INDEX_PATH,
+    git_snapshot_output_dir: Path = GIT_TRACKED_LATEST_RESULTS_PATH,
+) -> dict[str, Path]:
+    source_output_dir = source_output_dir.resolve()
+    git_snapshot_output_dir = git_snapshot_output_dir.resolve()
+
+    if source_output_dir == git_snapshot_output_dir:
+        metadata = load_metadata(git_snapshot_output_dir / "metadata.json")
+        root_index_path.write_text(
+            build_root_index_markdown(git_snapshot_output_dir, metadata)
+        )
+        return {
+            "output_dir": git_snapshot_output_dir,
+            "summary_csv": git_snapshot_output_dir / "summary.csv",
+            "metadata_json": git_snapshot_output_dir / "metadata.json",
+            "benchmark_markdown": git_snapshot_output_dir / "BENCHMARK.md",
+            "plots_dir": git_snapshot_output_dir / "plots",
+        }
+
+    source_summary_csv_path = source_output_dir / "summary.csv"
+    if not source_summary_csv_path.exists():
+        raise FileNotFoundError(
+            f"summary.csv not found for git snapshot publish: {source_summary_csv_path}"
+        )
+
+    source_metadata_path = source_output_dir / "metadata.json"
+    source_monitor_dir = source_output_dir / "monitor"
+    git_snapshot_output_dir.parent.mkdir(parents=True, exist_ok=True)
+    if git_snapshot_output_dir.exists():
+        shutil.rmtree(git_snapshot_output_dir)
+    git_snapshot_output_dir.mkdir(parents=True, exist_ok=True)
+
+    shutil.copy2(
+        source_summary_csv_path, git_snapshot_output_dir / "summary.csv"
+    )
+    if source_monitor_dir.exists():
+        shutil.copytree(source_monitor_dir, git_snapshot_output_dir / "monitor")
+
+    snapshot_metadata = load_metadata(source_metadata_path)
+    snapshot_metadata["source_output_dir"] = str(source_output_dir)
+    snapshot_metadata["source_summary_csv"] = str(source_summary_csv_path)
+    snapshot_metadata["source_metadata_json"] = str(source_metadata_path)
+    snapshot_metadata["published_snapshot_dir"] = str(git_snapshot_output_dir)
+    snapshot_metadata["published_snapshot_generated_at_utc"] = _utc_now_iso()
+    snapshot_metadata["output_dir"] = str(git_snapshot_output_dir)
+    snapshot_metadata["summary_csv"] = str(
+        git_snapshot_output_dir / "summary.csv"
+    )
+    snapshot_metadata["benchmark_markdown"] = str(
+        git_snapshot_output_dir / "BENCHMARK.md"
+    )
+    snapshot_metadata["plots_dir"] = str(git_snapshot_output_dir / "plots")
+    write_metadata_json(
+        git_snapshot_output_dir / "metadata.json", snapshot_metadata
+    )
+
+    snapshot_paths = render_result_report(
+        output_dir=git_snapshot_output_dir,
+        refresh_root_index=False,
+        root_index_path=root_index_path,
+    )
+    snapshot_metadata = load_metadata(snapshot_paths["metadata_json"])
+    root_index_path.write_text(
+        build_root_index_markdown(git_snapshot_output_dir, snapshot_metadata)
+    )
+    return snapshot_paths
 
 
 def render_result_report(
@@ -659,8 +756,10 @@ def render_result_report(
     benchmark_md_path.write_text(benchmark_md)
 
     if refresh_root_index:
-        root_index = build_root_index_markdown(output_dir, metadata)
-        root_index_path.write_text(root_index)
+        publish_git_tracked_latest_snapshot(
+            source_output_dir=output_dir,
+            root_index_path=root_index_path,
+        )
 
     return {
         "output_dir": output_dir,
@@ -689,7 +788,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--refresh_root_index",
         action="store_true",
-        help="Refresh the repo-root BENCHMARK.md index to point at this result directory.",
+        help=(
+            "Refresh the repo-root BENCHMARK.md index and republish the "
+            "git-tracked latest snapshot."
+        ),
     )
     parser.add_argument(
         "--root_index_path",
@@ -712,6 +814,7 @@ def main() -> int:
     print(f"Result BENCHMARK.md: {result_paths['benchmark_markdown']}")
     print(f"Plots directory: {result_paths['plots_dir']}")
     if args.refresh_root_index:
+        print(f"Git-tracked latest snapshot: {GIT_TRACKED_LATEST_RESULTS_PATH}")
         print(f"Root BENCHMARK index: {args.root_index_path}")
     return 0
 

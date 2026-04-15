@@ -89,7 +89,7 @@ Each run writes:
 - `BENCHMARK.md`: the result-local Markdown report for that run
 - `monitor/*.csv`: raw GPU power / clock traces for successful runs
 
-The batch runner also refreshes the repo-root `BENCHMARK.md` index so it points to the latest result directory and its local report.
+The batch runner also refreshes the repo-root `BENCHMARK.md` index and republishes a git-tracked snapshot at `results/llama_replace_ln_prefill/latest/`.
 
 ### Batch Component Ablation Matrix
 
@@ -131,7 +131,7 @@ You can regenerate plots and the result-local `BENCHMARK.md` from an existing re
 fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python scripts/benchmarks/render_llama_replace_ln_report.py --output_dir results/llama_replace_ln_prefill/<UTC_TIMESTAMP>'
 ```
 
-To also refresh the repo-root `BENCHMARK.md` index:
+To also refresh the repo-root `BENCHMARK.md` index and republish the git-tracked latest snapshot:
 
 ```sh
 fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python scripts/benchmarks/render_llama_replace_ln_report.py --output_dir results/llama_replace_ln_prefill/<UTC_TIMESTAMP> --refresh_root_index'
@@ -152,7 +152,7 @@ We use the name `Normalization-Induced Power Throttling` for the observation tha
 
 ### Current Working Conclusion
 
-As of the latest canonical matrix on `2026-04-14` ([results/llama_replace_ln_prefill/20260414T175515Z/BENCHMARK.md](results/llama_replace_ln_prefill/20260414T175515Z/BENCHMARK.md)), the current working onset region for `Normalization-Induced Power Throttling` is `prompt_len >= 256`.
+As of the latest canonical matrix on `2026-04-14` ([results/llama_replace_ln_prefill/latest/BENCHMARK.md](results/llama_replace_ln_prefill/latest/BENCHMARK.md)), the current working onset region for `Normalization-Induced Power Throttling` is `prompt_len >= 256`.
 
 We treat a case as a clearly throttled point when the baseline run simultaneously shows:
 
@@ -197,6 +197,6 @@ In the current Llama path it bypasses the `RMSNorm` flow in `python/models/llama
 
 `LLAMA2_MAX_POSITION_EMBEDDINGS = 16384` in `python/models/llama_config.py` is only a position-length limit. The current A100 40GB fitting logic trims layer count based on persistent weight memory and does not guarantee that every long-sequence benchmark combination will fit transient activations, workspaces, or all runtime allocations. For this reason, the canonical batch matrix is limited to `16/32/64/128/256/512/1024/2048/4096/8192`, while non-standard prompt lengths should be treated as ad hoc reference runs.
 
-Latest canonical `replace_ln` batch results should be read from the repo-root `BENCHMARK.md` index and the linked `results/llama_replace_ln_prefill/<timestamp>/BENCHMARK.md`.
+Latest canonical `replace_ln` batch results should be read from the repo-root `BENCHMARK.md` index and the linked git-tracked `results/llama_replace_ln_prefill/latest/BENCHMARK.md`.
 
 Latest multi-component ablation batch results should be read from the repo-root `BENCHMARK_COMPONENT_ABLATION.md` index and the linked `results/llama_component_ablation_prefill/<timestamp>/BENCHMARK.md`.
