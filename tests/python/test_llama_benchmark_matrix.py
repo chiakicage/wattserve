@@ -121,11 +121,11 @@ class TestLlamaBenchmarkMatrix(unittest.TestCase):
             )
             self.assertEqual(
                 tuple(int(value) for value in axes[2].get_ylim()),
-                (1050, 1450),
+                (0, 1450),
             )
             self.assertEqual(
                 [int(value) for value in axes[2].get_yticks()],
-                [1100, 1200, 1300, 1400],
+                [0, 250, 500, 750, 1000, 1250, 1450],
             )
         finally:
             plt.close(fig)
@@ -208,6 +208,7 @@ class TestLlamaBenchmarkMatrix(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             output_dir = temp_path / "results" / "run1"
+            latest_output_dir = temp_path / "results" / "latest"
             output_dir.mkdir(parents=True)
             summary_csv_path = output_dir / "summary.csv"
             metadata_path = output_dir / "metadata.json"
@@ -250,6 +251,7 @@ class TestLlamaBenchmarkMatrix(unittest.TestCase):
                 output_dir=output_dir,
                 refresh_root_index=True,
                 root_index_path=root_index_path,
+                git_snapshot_output_dir=latest_output_dir,
             )
 
             benchmark_md = (output_dir / "BENCHMARK.md").read_text()
@@ -287,7 +289,11 @@ class TestLlamaBenchmarkMatrix(unittest.TestCase):
                 "- Warmup / repeat / monitor interval: `5` / `10` / `0.01`",
                 benchmark_md,
             )
-            self.assertIn("results/run1/BENCHMARK.md", root_index_md)
+            self.assertIn(
+                str(latest_output_dir / "BENCHMARK.md"),
+                root_index_md,
+            )
+            self.assertIn(str(output_dir), root_index_md)
             self.assertEqual(
                 metadata["report_prompt_lengths"],
                 [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192],
@@ -305,6 +311,9 @@ class TestLlamaBenchmarkMatrix(unittest.TestCase):
                 plot_path = output_dir / "plots" / plot_name
                 self.assertTrue(plot_path.exists())
                 self.assertGreater(plot_path.stat().st_size, 0)
+                self.assertTrue(
+                    (latest_output_dir / "plots" / plot_name).exists()
+                )
 
 
 if __name__ == "__main__":

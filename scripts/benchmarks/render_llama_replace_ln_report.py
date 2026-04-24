@@ -39,21 +39,21 @@ METRIC_AXIS_CONFIG = {
         "yticks": [0, 100, 200, 300, 400],
     },
     "avg_gpu_clock_mhz": {
-        "ylim": (1050, 1450),
-        "yticks": [1100, 1200, 1300, 1400],
+        "ylim": (0, 1450),
+        "yticks": [0, 250, 500, 750, 1000, 1250, 1450],
     },
 }
-PLOT_FIGSIZE = (16, 12)
+PLOT_FIGSIZE = (18, 13)
 PLOT_DPI = 240
-PLOT_LINEWIDTH = 3.2
-PLOT_MARKERSIZE = 8
-PLOT_AXIS_TITLE_FONTSIZE = 18
-PLOT_SUPTITLE_FONTSIZE = 22
-PLOT_LABEL_FONTSIZE = 15
-PLOT_TICK_LABELSIZE = 13
-PLOT_LEGEND_FONTSIZE = 13
-PLOT_GRID_LINEWIDTH = 1.2
-PLOT_SPINE_LINEWIDTH = 1.8
+PLOT_LINEWIDTH = 4.0
+PLOT_MARKERSIZE = 9
+PLOT_AXIS_TITLE_FONTSIZE = 22
+PLOT_SUPTITLE_FONTSIZE = 28
+PLOT_LABEL_FONTSIZE = 19
+PLOT_TICK_LABELSIZE = 16
+PLOT_LEGEND_FONTSIZE = 15
+PLOT_GRID_LINEWIDTH = 1.4
+PLOT_SPINE_LINEWIDTH = 2.4
 
 
 def _utc_now_iso() -> str:
@@ -237,8 +237,10 @@ def _style_axis_for_presentation(axis: Any) -> None:
         which="major",
         labelsize=PLOT_TICK_LABELSIZE,
         width=PLOT_SPINE_LINEWIDTH,
-        length=6,
+        length=7,
     )
+    for tick_label in [*axis.get_xticklabels(), *axis.get_yticklabels()]:
+        tick_label.set_fontweight("bold")
 
 
 def generate_metric_plots(
@@ -715,6 +717,7 @@ def render_result_report(
     summary_csv_path: Path | None = None,
     refresh_root_index: bool = False,
     root_index_path: Path = ROOT_BENCHMARK_INDEX_PATH,
+    git_snapshot_output_dir: Path = GIT_TRACKED_LATEST_RESULTS_PATH,
 ) -> dict[str, Path]:
     if output_dir is None and summary_csv_path is None:
         raise ValueError(
@@ -759,6 +762,7 @@ def render_result_report(
         publish_git_tracked_latest_snapshot(
             source_output_dir=output_dir,
             root_index_path=root_index_path,
+            git_snapshot_output_dir=git_snapshot_output_dir,
         )
 
     return {

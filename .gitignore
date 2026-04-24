@@ -7,3 +7,7 @@ results/*
 results/llama_replace_ln_prefill/*
 !results/llama_replace_ln_prefill/latest/
 !results/llama_replace_ln_prefill/latest/**
+!results/llama_component_ablation_prefill/
+results/llama_component_ablation_prefill/*
+!results/llama_component_ablation_prefill/latest/
+!results/llama_component_ablation_prefill/latest/**

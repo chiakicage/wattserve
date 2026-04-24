@@ -1,0 +1,118 @@
+{
+  "run_started_at_utc": "2026-04-24T08:24:18.432008Z",
+  "output_dir": "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/latest",
+  "summary_csv": "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/latest/summary.csv",
+  "benchmark_markdown": "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/latest/BENCHMARK.md",
+  "plots_dir": "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/latest/plots",
+  "models": [
+    "7B",
+    "13B",
+    "34B",
+    "70B"
+  ],
+  "prompt_lengths": [
+    16,
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024,
+    2048,
+    4096,
+    8192
+  ],
+  "variants": [
+    "baseline",
+    "replace_ln",
+    "replace_attention",
+    "replace_rope",
+    "replace_activation"
+  ],
+  "variant_definitions": [
+    {
+      "variant": "baseline",
+      "replace_ln": false,
+      "replace_attention": false,
+      "replace_rope": false,
+      "replace_activation": false
+    },
+    {
+      "variant": "replace_ln",
+      "replace_ln": true,
+      "replace_attention": false,
+      "replace_rope": false,
+      "replace_activation": false
+    },
+    {
+      "variant": "replace_attention",
+      "replace_ln": false,
+      "replace_attention": true,
+      "replace_rope": false,
+      "replace_activation": false
+    },
+    {
+      "variant": "replace_rope",
+      "replace_ln": false,
+      "replace_attention": false,
+      "replace_rope": true,
+      "replace_activation": false
+    },
+    {
+      "variant": "replace_activation",
+      "replace_ln": false,
+      "replace_attention": false,
+      "replace_rope": false,
+      "replace_activation": true
+    }
+  ],
+  "warmup": 5,
+  "repeat": 10,
+  "monitor_interval": 0.01,
+  "environment": {
+    "python_version": "3.13.13",
+    "platform": "Linux-5.15.102-x86_64-with-glibc2.35",
+    "torch_version": "2.11.0+cu130",
+    "cuda_available": true,
+    "cuda_device_name": "NVIDIA A100-PCIE-40GB",
+    "cuda_device_count": 1,
+    "flashinfer_version": "0.6.7.post3",
+    "transformers_version": "5.5.3"
+  },
+  "run_completed_at_utc": "2026-04-24T08:37:47.071893Z",
+  "row_count": 200,
+  "success_count": 200,
+  "failure_count": 0,
+  "plot_files": [
+    "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/latest/plots/ttft_ms.png",
+    "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/latest/plots/prefill_tflops_s.png",
+    "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/latest/plots/avg_power_watts.png",
+    "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/latest/plots/avg_gpu_clock_mhz.png"
+  ],
+  "report_prompt_lengths": [
+    16,
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024,
+    2048,
+    4096,
+    8192
+  ],
+  "report_variants": [
+    "baseline",
+    "replace_ln",
+    "replace_attention",
+    "replace_rope",
+    "replace_activation"
+  ],
+  "excluded_prompt_lengths": [],
+  "render_generated_at_utc": "2026-04-24T09:19:20.833974Z",
+  "source_output_dir": "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/20260424T082410Z",
+  "source_summary_csv": "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/20260424T082410Z/summary.csv",
+  "source_metadata_json": "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/20260424T082410Z/metadata.json",
+  "published_snapshot_dir": "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/latest",
+  "published_snapshot_generated_at_utc": "2026-04-24T09:19:14.969036Z"
+}

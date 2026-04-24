@@ -121,7 +121,7 @@ Each run writes the same result-local artifacts as the `replace_ln` matrix:
 - `BENCHMARK.md`
 - `monitor/*.csv`
 
-The component ablation runner refreshes the repo-root `BENCHMARK_COMPONENT_ABLATION.md` index so it points to the latest component ablation result directory and local report.
+The component ablation runner writes a timestamped result directory by default and does not modify the git-tracked `results/llama_component_ablation_prefill/latest/` snapshot unless you explicitly publish it.
 
 ### Re-render Report and Plots
 
@@ -142,6 +142,12 @@ For component ablation results:
 ```sh
 fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python scripts/benchmarks/render_llama_component_ablation_report.py --output_dir results/llama_component_ablation_prefill/<UTC_TIMESTAMP>'
 fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python scripts/benchmarks/render_llama_component_ablation_report.py --output_dir results/llama_component_ablation_prefill/<UTC_TIMESTAMP> --refresh_root_index'
+```
+
+To run the component ablation matrix and explicitly republish the git-tracked `latest/` snapshot:
+
+```sh
+fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python scripts/benchmarks/run_llama_component_ablation_matrix.py --publish_latest'
 ```
 
 ## Benchmark Notes
@@ -199,4 +205,4 @@ In the current Llama path it bypasses the `RMSNorm` flow in `python/models/llama
 
 Latest canonical `replace_ln` batch results should be read from the repo-root `BENCHMARK.md` index and the linked git-tracked `results/llama_replace_ln_prefill/latest/BENCHMARK.md`.
 
-Latest multi-component ablation batch results should be read from the repo-root `BENCHMARK_COMPONENT_ABLATION.md` index and the linked `results/llama_component_ablation_prefill/<timestamp>/BENCHMARK.md`.
+Latest multi-component ablation batch results should be read from the repo-root `BENCHMARK_COMPONENT_ABLATION.md` index and the linked git-tracked `results/llama_component_ablation_prefill/latest/BENCHMARK.md`.

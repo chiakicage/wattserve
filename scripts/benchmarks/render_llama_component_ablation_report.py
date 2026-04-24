@@ -3,12 +3,16 @@
 import argparse
 import csv
 import json
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+GIT_TRACKED_LATEST_RESULTS_PATH = (
+    REPO_ROOT / "results" / "llama_component_ablation_prefill" / "latest"
+)
 ROOT_COMPONENT_ABLATION_INDEX_PATH = (
     REPO_ROOT / "BENCHMARK_COMPONENT_ABLATION.md"
 )
@@ -44,8 +48,8 @@ METRIC_AXIS_CONFIG = {
         "yticks": [0, 100, 200, 300, 400],
     },
     "avg_gpu_clock_mhz": {
-        "ylim": (1050, 1450),
-        "yticks": [1100, 1200, 1300, 1400],
+        "ylim": (0, 1450),
+        "yticks": [0, 250, 500, 750, 1000, 1250, 1450],
     },
 }
 VARIANT_STYLES = {
@@ -70,17 +74,17 @@ VARIANT_STYLES = {
         "label": "replace_activation",
     },
 }
-PLOT_FIGSIZE = (16, 12)
+PLOT_FIGSIZE = (18, 13)
 PLOT_DPI = 240
-PLOT_LINEWIDTH = 3.2
-PLOT_MARKERSIZE = 8
-PLOT_AXIS_TITLE_FONTSIZE = 18
-PLOT_SUPTITLE_FONTSIZE = 22
-PLOT_LABEL_FONTSIZE = 15
-PLOT_TICK_LABELSIZE = 13
-PLOT_LEGEND_FONTSIZE = 13
-PLOT_GRID_LINEWIDTH = 1.2
-PLOT_SPINE_LINEWIDTH = 1.8
+PLOT_LINEWIDTH = 4.0
+PLOT_MARKERSIZE = 9
+PLOT_AXIS_TITLE_FONTSIZE = 22
+PLOT_SUPTITLE_FONTSIZE = 28
+PLOT_LABEL_FONTSIZE = 19
+PLOT_TICK_LABELSIZE = 16
+PLOT_LEGEND_FONTSIZE = 15
+PLOT_GRID_LINEWIDTH = 1.4
+PLOT_SPINE_LINEWIDTH = 2.4
 
 
 def _utc_now_iso() -> str:
@@ -277,8 +281,10 @@ def _style_axis_for_presentation(axis: Any) -> None:
         which="major",
         labelsize=PLOT_TICK_LABELSIZE,
         width=PLOT_SPINE_LINEWIDTH,
-        length=6,
+        length=7,
     )
+    for tick_label in [*axis.get_xticklabels(), *axis.get_yticklabels()]:
+        tick_label.set_fontweight("bold")
 
 
 def generate_metric_plots(
@@ -558,6 +564,10 @@ def build_root_index_markdown(
     metadata: dict[str, Any],
 ) -> str:
     latest_dir_display = _display_path(latest_output_dir)
+    source_output_dir = metadata.get("source_output_dir")
+    source_dir_display = None
+    if source_output_dir:
+        source_dir_display = _display_path(Path(source_output_dir))
     report_path = latest_output_dir / "BENCHMARK.md"
     summary_path = latest_output_dir / "summary.csv"
     metadata_path = latest_output_dir / "metadata.json"
@@ -566,9 +576,9 @@ def build_root_index_markdown(
     lines = [
         "# Latest Llama Component Ablation Benchmark",
         "",
-        "This file indexes the latest multi-component Llama ablation benchmark report.",
+        "This file indexes the latest multi-component Llama ablation benchmark snapshot tracked in git.",
         "",
-        f"- Latest result directory: `{latest_dir_display}`",
+        f"- Git-tracked latest snapshot: `{latest_dir_display}`",
         (
             "- Standard prompt lengths: "
             f"`{_prompt_lengths_display(DEFAULT_PROMPT_LENGTHS)}`"
@@ -584,6 +594,12 @@ def build_root_index_markdown(
         "- Prompt lengths outside the standard matrix may still appear in older result directories and should be treated as non-canonical reference data.",
     ]
 
+    if (
+        source_dir_display is not None
+        and source_dir_display != latest_dir_display
+    ):
+        lines.append(f"- Source run directory: `{source_dir_display}`")
+
     if metadata.get("run_started_at_utc"):
         lines.append(
             f"- Latest benchmark run started at: `{metadata['run_started_at_utc']}`"
@@ -592,11 +608,83 @@ def build_root_index_markdown(
     return "\n".join(lines) + "\n"
 
 
+def publish_git_tracked_latest_snapshot(
+    source_output_dir: Path,
+    root_index_path: Path = ROOT_COMPONENT_ABLATION_INDEX_PATH,
+    git_snapshot_output_dir: Path = GIT_TRACKED_LATEST_RESULTS_PATH,
+) -> dict[str, Path]:
+    source_output_dir = source_output_dir.resolve()
+    git_snapshot_output_dir = git_snapshot_output_dir.resolve()
+
+    if source_output_dir == git_snapshot_output_dir:
+        metadata = load_metadata(git_snapshot_output_dir / "metadata.json")
+        root_index_path.write_text(
+            build_root_index_markdown(git_snapshot_output_dir, metadata)
+        )
+        return {
+            "output_dir": git_snapshot_output_dir,
+            "summary_csv": git_snapshot_output_dir / "summary.csv",
+            "metadata_json": git_snapshot_output_dir / "metadata.json",
+            "benchmark_markdown": git_snapshot_output_dir / "BENCHMARK.md",
+            "plots_dir": git_snapshot_output_dir / "plots",
+        }
+
+    source_summary_csv_path = source_output_dir / "summary.csv"
+    if not source_summary_csv_path.exists():
+        raise FileNotFoundError(
+            f"summary.csv not found for git snapshot publish: {source_summary_csv_path}"
+        )
+
+    source_metadata_path = source_output_dir / "metadata.json"
+    source_monitor_dir = source_output_dir / "monitor"
+    git_snapshot_output_dir.parent.mkdir(parents=True, exist_ok=True)
+    if git_snapshot_output_dir.exists():
+        shutil.rmtree(git_snapshot_output_dir)
+    git_snapshot_output_dir.mkdir(parents=True, exist_ok=True)
+
+    shutil.copy2(
+        source_summary_csv_path, git_snapshot_output_dir / "summary.csv"
+    )
+    if source_monitor_dir.exists():
+        shutil.copytree(source_monitor_dir, git_snapshot_output_dir / "monitor")
+
+    snapshot_metadata = load_metadata(source_metadata_path)
+    snapshot_metadata["source_output_dir"] = str(source_output_dir)
+    snapshot_metadata["source_summary_csv"] = str(source_summary_csv_path)
+    snapshot_metadata["source_metadata_json"] = str(source_metadata_path)
+    snapshot_metadata["published_snapshot_dir"] = str(git_snapshot_output_dir)
+    snapshot_metadata["published_snapshot_generated_at_utc"] = _utc_now_iso()
+    snapshot_metadata["output_dir"] = str(git_snapshot_output_dir)
+    snapshot_metadata["summary_csv"] = str(
+        git_snapshot_output_dir / "summary.csv"
+    )
+    snapshot_metadata["benchmark_markdown"] = str(
+        git_snapshot_output_dir / "BENCHMARK.md"
+    )
+    snapshot_metadata["plots_dir"] = str(git_snapshot_output_dir / "plots")
+    write_metadata_json(
+        git_snapshot_output_dir / "metadata.json", snapshot_metadata
+    )
+
+    snapshot_paths = render_result_report(
+        output_dir=git_snapshot_output_dir,
+        refresh_root_index=False,
+        root_index_path=root_index_path,
+        git_snapshot_output_dir=git_snapshot_output_dir,
+    )
+    snapshot_metadata = load_metadata(snapshot_paths["metadata_json"])
+    root_index_path.write_text(
+        build_root_index_markdown(git_snapshot_output_dir, snapshot_metadata)
+    )
+    return snapshot_paths
+
+
 def render_result_report(
     output_dir: Path | None = None,
     summary_csv_path: Path | None = None,
     refresh_root_index: bool = False,
     root_index_path: Path = ROOT_COMPONENT_ABLATION_INDEX_PATH,
+    git_snapshot_output_dir: Path = GIT_TRACKED_LATEST_RESULTS_PATH,
 ) -> dict[str, Path]:
     if output_dir is None and summary_csv_path is None:
         raise ValueError(
@@ -638,8 +726,11 @@ def render_result_report(
     benchmark_md_path.write_text(benchmark_md)
 
     if refresh_root_index:
-        root_index = build_root_index_markdown(output_dir, metadata)
-        root_index_path.write_text(root_index)
+        publish_git_tracked_latest_snapshot(
+            source_output_dir=output_dir,
+            root_index_path=root_index_path,
+            git_snapshot_output_dir=git_snapshot_output_dir,
+        )
 
     return {
         "output_dir": output_dir,
@@ -674,7 +765,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--refresh_root_index",
         action="store_true",
-        help="Refresh the repo-root BENCHMARK_COMPONENT_ABLATION.md index.",
+        help=(
+            "Refresh the repo-root BENCHMARK_COMPONENT_ABLATION.md index "
+            "and republish the git-tracked latest snapshot."
+        ),
     )
     return parser
 
@@ -690,6 +784,10 @@ def main() -> int:
     print(f"BENCHMARK.md: {result_paths['benchmark_markdown']}")
     print(f"Plots: {result_paths['plots_dir']}")
     if args.refresh_root_index:
+        print(
+            "Git-tracked latest snapshot: "
+            f"{GIT_TRACKED_LATEST_RESULTS_PATH}"
+        )
         print(
             "Root BENCHMARK index: "
             f"{ROOT_COMPONENT_ABLATION_INDEX_PATH}"
