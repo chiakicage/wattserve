@@ -16,19 +16,19 @@ The current repository includes custom Llama inference paths built on top of Fla
 ## Main Entry Points
 
 - `README.md`: setup, benchmark workflow, and caveats
-- `BENCHMARK.md`: repo-root index pointing to the git-tracked latest canonical Llama benchmark snapshot
+- `BENCHMARK.md`: repo-root index pointing to the git-tracked latest canonical Llama benchmark snapshots, grouped by device
 - `python/bench_llama.py`: single-run Llama prefill benchmark with structured result output and optional monitor CSV export
 - `scripts/benchmarks/run_llama_replace_ln_matrix.py`: batch runner for the fixed Llama `replace_ln` matrix
-- `scripts/benchmarks/render_llama_replace_ln_report.py`: renders `plots/*.png` and the result-local `BENCHMARK.md` for an existing result directory; when refreshing the root index it also republishes the git-tracked `results/llama_replace_ln_prefill/latest/` snapshot
+- `scripts/benchmarks/render_llama_replace_ln_report.py`: renders `plots/*.png` and the result-local `BENCHMARK.md` for an existing result directory; when refreshing the root index it also republishes the git-tracked device snapshot under `results/llama_replace_ln_prefill/latest/<device_slug>/`
 - `scripts/benchmarks/run_llama_component_ablation_matrix.py`: batch runner for the fixed Llama component ablation matrix
 - `scripts/benchmarks/render_llama_component_ablation_report.py`: renders `plots/*.png` and the result-local `BENCHMARK.md` for an existing component ablation result directory
 - `scripts/benchmarks/README.md`: explains what each benchmark script does and how to run it
 - `python/models/llama.py`: inference-only Llama model using FlashInfer ops
 - `python/models/llama_config.py`: Llama model specs plus parameter / FLOPs / memory estimators
 - `python/monitor/gpu_monitor.py`: NVML-based power / clock sampling
-- `results/llama_replace_ln_prefill/`: generated batch benchmark outputs, one timestamped directory per run plus the git-tracked `latest/` snapshot
-- `results/llama_component_ablation_prefill/`: generated component ablation outputs, one timestamped directory per run plus the git-tracked `latest/` snapshot
-- `BENCHMARK_COMPONENT_ABLATION.md`: repo-root index pointing to the git-tracked latest component ablation snapshot
+- `results/llama_replace_ln_prefill/`: generated batch benchmark outputs, one timestamped directory per run plus the git-tracked `latest/` device snapshot tree
+- `results/llama_component_ablation_prefill/`: generated component ablation outputs, one timestamped directory per run plus the git-tracked `latest/` device snapshot tree
+- `BENCHMARK_COMPONENT_ABLATION.md`: repo-root index pointing to the git-tracked latest component ablation snapshots, grouped by device
 - `3rdparty/`: vendored dependencies, notably `flashinfer` and `cutlass`
 
 ## Current Codebase State
@@ -128,13 +128,19 @@ Run the batch Llama ablation matrix:
 fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python scripts/benchmarks/run_llama_replace_ln_matrix.py'
 ```
 
+Publish the current `replace_ln` matrix result as the git-tracked latest snapshot for the current device:
+
+```sh
+fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python scripts/benchmarks/run_llama_replace_ln_matrix.py --publish_latest'
+```
+
 Run the batch Llama component ablation matrix:
 
 ```sh
 fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python scripts/benchmarks/run_llama_component_ablation_matrix.py'
 ```
 
-Publish the current component ablation result as the git-tracked `latest/` snapshot:
+Publish the current component ablation result as the git-tracked latest snapshot for the current device:
 
 ```sh
 fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python scripts/benchmarks/run_llama_component_ablation_matrix.py --publish_latest'
@@ -160,7 +166,7 @@ Re-render plots and the result-local report for an existing result directory:
 fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python scripts/benchmarks/render_llama_replace_ln_report.py --output_dir results/llama_replace_ln_prefill/<timestamp>'
 ```
 
-Re-render, refresh the repo-root benchmark index, and republish the git-tracked latest snapshot:
+Re-render, refresh the repo-root benchmark index, and republish the git-tracked latest snapshot for that result's device:
 
 ```sh
 fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python scripts/benchmarks/render_llama_replace_ln_report.py --output_dir results/llama_replace_ln_prefill/<timestamp> --refresh_root_index'
@@ -172,7 +178,7 @@ Re-render the component ablation report for an existing result directory:
 fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python scripts/benchmarks/render_llama_component_ablation_report.py --output_dir results/llama_component_ablation_prefill/<timestamp>'
 ```
 
-Re-render, refresh the repo-root component ablation index, and republish the git-tracked latest snapshot:
+Re-render, refresh the repo-root component ablation index, and republish the git-tracked latest snapshot for that result's device:
 
 ```sh
 fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python scripts/benchmarks/render_llama_component_ablation_report.py --output_dir results/llama_component_ablation_prefill/<timestamp> --refresh_root_index'
@@ -191,9 +197,9 @@ fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python scripts/benchma
 - The standard batch benchmark matrix is now fixed to `16/32/64/128/256/512/1024/2048/4096/8192`. Prompt lengths outside that set should be treated as ad hoc reference runs.
 - The current A100 40GB fitting logic only constrains persistent weight memory. It does not account for transient activations, intermediate tensors, workspaces, or all runtime allocations.
 - Each canonical benchmark run writes its own `summary.csv`, `metadata.json`, `plots/*.png`, `monitor/*.csv`, and result-local `BENCHMARK.md` inside a timestamped result directory.
-- Refreshing the repo-root benchmark index also republishes a git-tracked copy of the latest canonical artifacts to `results/llama_replace_ln_prefill/latest/`.
+- Refreshing the repo-root benchmark index republishes a git-tracked copy of the latest canonical artifacts to `results/llama_replace_ln_prefill/latest/<device_slug>/` and refreshes the device index at `results/llama_replace_ln_prefill/latest/BENCHMARK.md`.
 - The component ablation benchmark writes the same artifact set inside `results/llama_component_ablation_prefill/<timestamp>/`.
-- Publishing the component ablation `latest/` snapshot is an explicit action. Do not overwrite `results/llama_component_ablation_prefill/latest/` unless the user asks for it.
+- Publishing either benchmark family's `latest/` snapshot is an explicit action. Do not overwrite `results/llama_replace_ln_prefill/latest/<device_slug>/` or `results/llama_component_ablation_prefill/latest/<device_slug>/` unless the user asks for it.
 - The batch runner records individual run failures to `summary.csv` and continues with the remaining matrix entries.
 
 ## Working Notes For Future Edits

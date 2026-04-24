@@ -333,8 +333,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--publish_latest",
         action="store_true",
         help=(
-            "Republish results/llama_component_ablation_prefill/latest/ "
-            "and refresh the repo-root BENCHMARK_COMPONENT_ABLATION.md index."
+            "Republish the git-tracked latest device snapshot under "
+            "results/llama_component_ablation_prefill/latest/<device_slug>/ "
+            "and refresh the repo-root "
+            "BENCHMARK_COMPONENT_ABLATION.md index."
         ),
     )
     return parser

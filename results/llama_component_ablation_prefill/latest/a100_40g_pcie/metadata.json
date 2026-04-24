@@ -1,9 +1,9 @@
 {
   "run_started_at_utc": "2026-04-24T08:24:18.432008Z",
-  "output_dir": "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/latest",
-  "summary_csv": "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/latest/summary.csv",
-  "benchmark_markdown": "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/latest/BENCHMARK.md",
-  "plots_dir": "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/latest/plots",
+  "output_dir": "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/latest/a100_40g_pcie",
+  "summary_csv": "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/latest/a100_40g_pcie/summary.csv",
+  "benchmark_markdown": "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/latest/a100_40g_pcie/BENCHMARK.md",
+  "plots_dir": "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/latest/a100_40g_pcie/plots",
   "models": [
     "7B",
     "13B",
@@ -84,10 +84,10 @@
   "success_count": 200,
   "failure_count": 0,
   "plot_files": [
-    "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/latest/plots/ttft_ms.png",
-    "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/latest/plots/prefill_tflops_s.png",
-    "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/latest/plots/avg_power_watts.png",
-    "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/latest/plots/avg_gpu_clock_mhz.png"
+    "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/latest/a100_40g_pcie/plots/ttft_ms.png",
+    "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/latest/a100_40g_pcie/plots/prefill_tflops_s.png",
+    "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/latest/a100_40g_pcie/plots/avg_power_watts.png",
+    "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/latest/a100_40g_pcie/plots/avg_gpu_clock_mhz.png"
   ],
   "report_prompt_lengths": [
     16,
@@ -109,10 +109,13 @@
     "replace_activation"
   ],
   "excluded_prompt_lengths": [],
-  "render_generated_at_utc": "2026-04-24T09:19:20.833974Z",
+  "render_generated_at_utc": "2026-04-24T10:04:02.855593Z",
   "source_output_dir": "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/20260424T082410Z",
   "source_summary_csv": "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/20260424T082410Z/summary.csv",
   "source_metadata_json": "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/20260424T082410Z/metadata.json",
-  "published_snapshot_dir": "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/latest",
-  "published_snapshot_generated_at_utc": "2026-04-24T09:19:14.969036Z"
+  "published_snapshot_root_dir": "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/latest",
+  "published_snapshot_dir": "/home/ckq/nfs/wattserve/results/llama_component_ablation_prefill/latest/a100_40g_pcie",
+  "published_snapshot_generated_at_utc": "2026-04-24T10:03:56.739713Z",
+  "published_device_slug": "a100_40g_pcie",
+  "published_device_label": "A100 40G PCIe"
 }

@@ -1,9 +1,9 @@
 {
   "run_started_at_utc": "2026-04-14T17:55:22.057389Z",
-  "output_dir": "/home/cage/wattserve/results/llama_replace_ln_prefill/latest",
-  "summary_csv": "/home/cage/wattserve/results/llama_replace_ln_prefill/latest/summary.csv",
-  "benchmark_markdown": "/home/cage/wattserve/results/llama_replace_ln_prefill/latest/BENCHMARK.md",
-  "plots_dir": "/home/cage/wattserve/results/llama_replace_ln_prefill/latest/plots",
+  "output_dir": "/home/ckq/nfs/wattserve/results/llama_replace_ln_prefill/latest/a100_40g_sxm",
+  "summary_csv": "/home/ckq/nfs/wattserve/results/llama_replace_ln_prefill/latest/a100_40g_sxm/summary.csv",
+  "benchmark_markdown": "results/llama_replace_ln_prefill/latest/a100_40g_sxm/BENCHMARK.md",
+  "plots_dir": "results/llama_replace_ln_prefill/latest/a100_40g_sxm/plots",
   "models": [
     "7B",
     "13B",
@@ -44,10 +44,10 @@
   "success_count": 80,
   "failure_count": 0,
   "plot_files": [
-    "/home/cage/wattserve/results/llama_replace_ln_prefill/latest/plots/prefill_tflops_s.png",
-    "/home/cage/wattserve/results/llama_replace_ln_prefill/latest/plots/avg_power_watts.png",
-    "/home/cage/wattserve/results/llama_replace_ln_prefill/latest/plots/avg_gpu_clock_mhz.png",
-    "/home/cage/wattserve/results/llama_replace_ln_prefill/latest/plots/prefill_tflops_uplift_pct.png"
+    "results/llama_replace_ln_prefill/latest/a100_40g_sxm/plots/prefill_tflops_s.png",
+    "results/llama_replace_ln_prefill/latest/a100_40g_sxm/plots/avg_power_watts.png",
+    "results/llama_replace_ln_prefill/latest/a100_40g_sxm/plots/avg_gpu_clock_mhz.png",
+    "results/llama_replace_ln_prefill/latest/a100_40g_sxm/plots/prefill_tflops_uplift_pct.png"
   ],
   "report_prompt_lengths": [
     16,
@@ -62,10 +62,13 @@
     8192
   ],
   "excluded_prompt_lengths": [],
-  "render_generated_at_utc": "2026-04-15T08:20:14.653686Z",
+  "render_generated_at_utc": "2026-04-24T10:03:54.249914Z",
   "source_output_dir": "/home/cage/wattserve/results/llama_replace_ln_prefill/20260414T175515Z",
   "source_summary_csv": "/home/cage/wattserve/results/llama_replace_ln_prefill/20260414T175515Z/summary.csv",
   "source_metadata_json": "/home/cage/wattserve/results/llama_replace_ln_prefill/20260414T175515Z/metadata.json",
-  "published_snapshot_dir": "/home/cage/wattserve/results/llama_replace_ln_prefill/latest",
-  "published_snapshot_generated_at_utc": "2026-04-15T08:20:12.529327Z"
+  "published_snapshot_dir": "/home/ckq/nfs/wattserve/results/llama_replace_ln_prefill/latest/a100_40g_sxm",
+  "published_snapshot_generated_at_utc": "2026-04-24T09:56:28.096564Z",
+  "published_snapshot_root_dir": "/home/ckq/nfs/wattserve/results/llama_replace_ln_prefill/latest",
+  "published_device_slug": "a100_40g_sxm",
+  "published_device_label": "A100 40G SXM"
 }

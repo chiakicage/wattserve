@@ -81,6 +81,8 @@ The default output directory is:
 results/llama_replace_ln_prefill/<UTC_TIMESTAMP>/
 ```
 
+The runner writes a timestamped result directory by default and does not modify the git-tracked `latest/` snapshots unless you explicitly publish them.
+
 Each run writes:
 
 - `summary.csv`: one row per model / prompt length / variant run
@@ -89,7 +91,13 @@ Each run writes:
 - `BENCHMARK.md`: the result-local Markdown report for that run
 - `monitor/*.csv`: raw GPU power / clock traces for successful runs
 
-The batch runner also refreshes the repo-root `BENCHMARK.md` index and republishes a git-tracked snapshot at `results/llama_replace_ln_prefill/latest/`.
+To publish the current run as the git-tracked latest snapshot for the current device:
+
+```sh
+fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python scripts/benchmarks/run_llama_replace_ln_matrix.py --publish_latest'
+```
+
+Publishing refreshes the repo-root `BENCHMARK.md` index, refreshes the family-level device index at `results/llama_replace_ln_prefill/latest/BENCHMARK.md`, and writes the device-specific snapshot under `results/llama_replace_ln_prefill/latest/<device_slug>/`.
 
 ### Batch Component Ablation Matrix
 
@@ -121,7 +129,7 @@ Each run writes the same result-local artifacts as the `replace_ln` matrix:
 - `BENCHMARK.md`
 - `monitor/*.csv`
 
-The component ablation runner writes a timestamped result directory by default and does not modify the git-tracked `results/llama_component_ablation_prefill/latest/` snapshot unless you explicitly publish it.
+The component ablation runner writes a timestamped result directory by default and does not modify the git-tracked `results/llama_component_ablation_prefill/latest/` snapshots unless you explicitly publish them.
 
 ### Re-render Report and Plots
 
@@ -131,7 +139,7 @@ You can regenerate plots and the result-local `BENCHMARK.md` from an existing re
 fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python scripts/benchmarks/render_llama_replace_ln_report.py --output_dir results/llama_replace_ln_prefill/<UTC_TIMESTAMP>'
 ```
 
-To also refresh the repo-root `BENCHMARK.md` index and republish the git-tracked latest snapshot:
+To also refresh the repo-root `BENCHMARK.md` index and republish the git-tracked latest snapshot for that result's device:
 
 ```sh
 fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python scripts/benchmarks/render_llama_replace_ln_report.py --output_dir results/llama_replace_ln_prefill/<UTC_TIMESTAMP> --refresh_root_index'
@@ -144,7 +152,7 @@ fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python scripts/benchma
 fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python scripts/benchmarks/render_llama_component_ablation_report.py --output_dir results/llama_component_ablation_prefill/<UTC_TIMESTAMP> --refresh_root_index'
 ```
 
-To run the component ablation matrix and explicitly republish the git-tracked `latest/` snapshot:
+To run the component ablation matrix and explicitly republish the git-tracked latest snapshot for the current device:
 
 ```sh
 fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python scripts/benchmarks/run_llama_component_ablation_matrix.py --publish_latest'
@@ -158,7 +166,7 @@ We use the name `Normalization-Induced Power Throttling` for the observation tha
 
 ### Current Working Conclusion
 
-As of the latest canonical matrix on `2026-04-14` ([results/llama_replace_ln_prefill/latest/BENCHMARK.md](results/llama_replace_ln_prefill/latest/BENCHMARK.md)), the current working onset region for `Normalization-Induced Power Throttling` is `prompt_len >= 256`.
+As of the latest canonical matrix on `2026-04-14` ([results/llama_replace_ln_prefill/latest/a100_40g_sxm/BENCHMARK.md](results/llama_replace_ln_prefill/latest/a100_40g_sxm/BENCHMARK.md)), the current working onset region for `Normalization-Induced Power Throttling` is `prompt_len >= 256`.
 
 We treat a case as a clearly throttled point when the baseline run simultaneously shows:
 
@@ -203,6 +211,6 @@ In the current Llama path it bypasses the `RMSNorm` flow in `python/models/llama
 
 `LLAMA2_MAX_POSITION_EMBEDDINGS = 16384` in `python/models/llama_config.py` is only a position-length limit. The current A100 40GB fitting logic trims layer count based on persistent weight memory and does not guarantee that every long-sequence benchmark combination will fit transient activations, workspaces, or all runtime allocations. For this reason, the canonical batch matrix is limited to `16/32/64/128/256/512/1024/2048/4096/8192`, while non-standard prompt lengths should be treated as ad hoc reference runs.
 
-Latest canonical `replace_ln` batch results should be read from the repo-root `BENCHMARK.md` index and the linked git-tracked `results/llama_replace_ln_prefill/latest/BENCHMARK.md`.
+Latest canonical `replace_ln` batch results should be read from the repo-root `BENCHMARK.md` index, then the linked device index `results/llama_replace_ln_prefill/latest/BENCHMARK.md`, and finally the relevant device snapshot under `results/llama_replace_ln_prefill/latest/<device_slug>/`.
 
-Latest multi-component ablation batch results should be read from the repo-root `BENCHMARK_COMPONENT_ABLATION.md` index and the linked git-tracked `results/llama_component_ablation_prefill/latest/BENCHMARK.md`.
+Latest multi-component ablation batch results should be read from the repo-root `BENCHMARK_COMPONENT_ABLATION.md` index, then the linked device index `results/llama_component_ablation_prefill/latest/BENCHMARK.md`, and finally the relevant device snapshot under `results/llama_component_ablation_prefill/latest/<device_slug>/`.

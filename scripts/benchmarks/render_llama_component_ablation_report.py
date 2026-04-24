@@ -8,9 +8,24 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+try:
+    from .device_snapshot import (
+        list_device_snapshots,
+        resolve_device_label,
+        resolve_device_slug,
+        resolve_device_snapshot_dir,
+    )
+except ImportError:
+    from device_snapshot import (  # type: ignore[no-redef]
+        list_device_snapshots,
+        resolve_device_label,
+        resolve_device_slug,
+        resolve_device_snapshot_dir,
+    )
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-GIT_TRACKED_LATEST_RESULTS_PATH = (
+GIT_TRACKED_LATEST_RESULTS_ROOT = (
     REPO_ROOT / "results" / "llama_component_ablation_prefill" / "latest"
 )
 ROOT_COMPONENT_ABLATION_INDEX_PATH = (
@@ -559,75 +574,110 @@ def build_result_benchmark_markdown(
     return "\n".join(lines) + "\n"
 
 
-def build_root_index_markdown(
-    latest_output_dir: Path,
-    metadata: dict[str, Any],
-) -> str:
-    latest_dir_display = _display_path(latest_output_dir)
-    source_output_dir = metadata.get("source_output_dir")
-    source_dir_display = None
-    if source_output_dir:
-        source_dir_display = _display_path(Path(source_output_dir))
-    report_path = latest_output_dir / "BENCHMARK.md"
-    summary_path = latest_output_dir / "summary.csv"
-    metadata_path = latest_output_dir / "metadata.json"
-    plots_dir = latest_output_dir / "plots"
+def _device_snapshot_table_lines(
+    snapshots: list[dict[str, Any]],
+) -> list[str]:
+    if not snapshots:
+        return ["No device-specific latest snapshots are currently tracked."]
 
     lines = [
-        "# Latest Llama Component Ablation Benchmark",
+        "| Device | Slug | Report | Summary CSV | Metadata | Source Run | Run Started At |",
+        "| --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    for snapshot in snapshots:
+        source_output_dir = snapshot.get("source_output_dir")
+        source_display = (
+            f"`{_display_path(Path(source_output_dir))}`"
+            if source_output_dir
+            else "n/a"
+        )
+        lines.append(
+            "| "
+            f"{snapshot['label']} | "
+            f"`{snapshot['slug']}` | "
+            f"[report]({_display_path(snapshot['benchmark_markdown'])}) | "
+            f"[summary]({_display_path(snapshot['summary_csv'])}) | "
+            f"[metadata]({_display_path(snapshot['metadata_json'])}) | "
+            f"{source_display} | "
+            f"`{snapshot.get('run_started_at_utc') or 'n/a'}` |"
+        )
+    return lines
+
+
+def build_latest_root_benchmark_markdown(
+    latest_root_dir: Path,
+    snapshots: list[dict[str, Any]],
+) -> str:
+    latest_root_display = _display_path(latest_root_dir)
+    lines = [
+        "# Llama Component Ablation Latest Snapshots",
         "",
-        "This file indexes the latest multi-component Llama ablation benchmark snapshot tracked in git.",
+        "This directory stores the git-tracked latest multi-component Llama ablation snapshot for each device.",
         "",
-        f"- Git-tracked latest snapshot: `{latest_dir_display}`",
+        f"- Snapshots root: `{latest_root_display}`",
         (
             "- Standard prompt lengths: "
             f"`{_prompt_lengths_display(DEFAULT_PROMPT_LENGTHS)}`"
         ),
-        (
-            "- Variants: "
-            f"`{_variants_display(metadata.get('report_variants', DEFAULT_VARIANTS))}`"
-        ),
-        f"- Latest report: [{_display_path(report_path)}]({_display_path(report_path)})",
-        f"- Latest summary CSV: [{_display_path(summary_path)}]({_display_path(summary_path)})",
-        f"- Latest metadata: [{_display_path(metadata_path)}]({_display_path(metadata_path)})",
-        f"- Latest plots directory: `{_display_path(plots_dir)}`",
+        f"- Variants: `{_variants_display(DEFAULT_VARIANTS)}`",
+        "- Publishing is device-scoped and explicit. Timestamped runs do not overwrite these snapshots unless requested.",
         "- Prompt lengths outside the standard matrix may still appear in older result directories and should be treated as non-canonical reference data.",
+        "",
+        "## Devices",
+        "",
+        *_device_snapshot_table_lines(snapshots),
     ]
-
-    if (
-        source_dir_display is not None
-        and source_dir_display != latest_dir_display
-    ):
-        lines.append(f"- Source run directory: `{source_dir_display}`")
-
-    if metadata.get("run_started_at_utc"):
-        lines.append(
-            f"- Latest benchmark run started at: `{metadata['run_started_at_utc']}`"
-        )
-
     return "\n".join(lines) + "\n"
+
+
+def build_root_index_markdown(
+    latest_root_dir: Path,
+    snapshots: list[dict[str, Any]],
+) -> str:
+    latest_root_display = _display_path(latest_root_dir)
+    latest_root_report = latest_root_dir / "BENCHMARK.md"
+    lines = [
+        "# Latest Llama Component Ablation Benchmark",
+        "",
+        "This file indexes the device-specific git-tracked latest multi-component Llama ablation snapshots.",
+        "",
+        f"- Git-tracked latest snapshots root: `{latest_root_display}`",
+        f"- Latest-by-device index: [{_display_path(latest_root_report)}]({_display_path(latest_root_report)})",
+        (
+            "- Standard prompt lengths: "
+            f"`{_prompt_lengths_display(DEFAULT_PROMPT_LENGTHS)}`"
+        ),
+        f"- Variants: `{_variants_display(DEFAULT_VARIANTS)}`",
+        "- Prompt lengths outside the standard matrix may still appear in older result directories and should be treated as non-canonical reference data.",
+        "",
+        "## Devices",
+        "",
+        *_device_snapshot_table_lines(snapshots),
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def refresh_latest_indices(
+    latest_root_dir: Path,
+    root_index_path: Path = ROOT_COMPONENT_ABLATION_INDEX_PATH,
+) -> None:
+    latest_root_dir.mkdir(parents=True, exist_ok=True)
+    snapshots = list_device_snapshots(latest_root_dir)
+    (latest_root_dir / "BENCHMARK.md").write_text(
+        build_latest_root_benchmark_markdown(latest_root_dir, snapshots)
+    )
+    root_index_path.write_text(
+        build_root_index_markdown(latest_root_dir, snapshots)
+    )
 
 
 def publish_git_tracked_latest_snapshot(
     source_output_dir: Path,
     root_index_path: Path = ROOT_COMPONENT_ABLATION_INDEX_PATH,
-    git_snapshot_output_dir: Path = GIT_TRACKED_LATEST_RESULTS_PATH,
+    git_snapshot_output_dir: Path = GIT_TRACKED_LATEST_RESULTS_ROOT,
 ) -> dict[str, Path]:
     source_output_dir = source_output_dir.resolve()
     git_snapshot_output_dir = git_snapshot_output_dir.resolve()
-
-    if source_output_dir == git_snapshot_output_dir:
-        metadata = load_metadata(git_snapshot_output_dir / "metadata.json")
-        root_index_path.write_text(
-            build_root_index_markdown(git_snapshot_output_dir, metadata)
-        )
-        return {
-            "output_dir": git_snapshot_output_dir,
-            "summary_csv": git_snapshot_output_dir / "summary.csv",
-            "metadata_json": git_snapshot_output_dir / "metadata.json",
-            "benchmark_markdown": git_snapshot_output_dir / "BENCHMARK.md",
-            "plots_dir": git_snapshot_output_dir / "plots",
-        }
 
     source_summary_csv_path = source_output_dir / "summary.csv"
     if not source_summary_csv_path.exists():
@@ -637,44 +687,72 @@ def publish_git_tracked_latest_snapshot(
 
     source_metadata_path = source_output_dir / "metadata.json"
     source_monitor_dir = source_output_dir / "monitor"
-    git_snapshot_output_dir.parent.mkdir(parents=True, exist_ok=True)
-    if git_snapshot_output_dir.exists():
-        shutil.rmtree(git_snapshot_output_dir)
-    git_snapshot_output_dir.mkdir(parents=True, exist_ok=True)
-
-    shutil.copy2(
-        source_summary_csv_path, git_snapshot_output_dir / "summary.csv"
-    )
-    if source_monitor_dir.exists():
-        shutil.copytree(source_monitor_dir, git_snapshot_output_dir / "monitor")
-
     snapshot_metadata = load_metadata(source_metadata_path)
+    device_slug = resolve_device_slug(snapshot_metadata)
+    device_label = resolve_device_label(snapshot_metadata)
+    device_snapshot_output_dir = resolve_device_snapshot_dir(
+        git_snapshot_output_dir, snapshot_metadata
+    )
+
+    if source_output_dir != device_snapshot_output_dir:
+        device_snapshot_output_dir.parent.mkdir(parents=True, exist_ok=True)
+        if device_snapshot_output_dir.exists():
+            shutil.rmtree(device_snapshot_output_dir)
+        device_snapshot_output_dir.mkdir(parents=True, exist_ok=True)
+
+        shutil.copy2(
+            source_summary_csv_path,
+            device_snapshot_output_dir / "summary.csv",
+        )
+        if source_monitor_dir.exists():
+            shutil.copytree(
+                source_monitor_dir,
+                device_snapshot_output_dir / "monitor",
+            )
+
     snapshot_metadata["source_output_dir"] = str(source_output_dir)
     snapshot_metadata["source_summary_csv"] = str(source_summary_csv_path)
     snapshot_metadata["source_metadata_json"] = str(source_metadata_path)
-    snapshot_metadata["published_snapshot_dir"] = str(git_snapshot_output_dir)
+    snapshot_metadata["published_snapshot_root_dir"] = str(
+        git_snapshot_output_dir
+    )
+    snapshot_metadata["published_snapshot_dir"] = str(
+        device_snapshot_output_dir
+    )
     snapshot_metadata["published_snapshot_generated_at_utc"] = _utc_now_iso()
-    snapshot_metadata["output_dir"] = str(git_snapshot_output_dir)
+    snapshot_metadata["published_device_slug"] = device_slug
+    snapshot_metadata["published_device_label"] = device_label
+    snapshot_metadata["output_dir"] = str(device_snapshot_output_dir)
     snapshot_metadata["summary_csv"] = str(
-        git_snapshot_output_dir / "summary.csv"
+        device_snapshot_output_dir / "summary.csv"
     )
     snapshot_metadata["benchmark_markdown"] = str(
-        git_snapshot_output_dir / "BENCHMARK.md"
+        device_snapshot_output_dir / "BENCHMARK.md"
     )
-    snapshot_metadata["plots_dir"] = str(git_snapshot_output_dir / "plots")
+    snapshot_metadata["plots_dir"] = str(device_snapshot_output_dir / "plots")
     write_metadata_json(
-        git_snapshot_output_dir / "metadata.json", snapshot_metadata
+        device_snapshot_output_dir / "metadata.json", snapshot_metadata
     )
 
-    snapshot_paths = render_result_report(
-        output_dir=git_snapshot_output_dir,
-        refresh_root_index=False,
+    if source_output_dir != device_snapshot_output_dir:
+        snapshot_paths = render_result_report(
+            output_dir=device_snapshot_output_dir,
+            refresh_root_index=False,
+            root_index_path=root_index_path,
+            git_snapshot_output_dir=git_snapshot_output_dir,
+        )
+    else:
+        snapshot_paths = {
+            "output_dir": device_snapshot_output_dir,
+            "summary_csv": device_snapshot_output_dir / "summary.csv",
+            "metadata_json": device_snapshot_output_dir / "metadata.json",
+            "benchmark_markdown": device_snapshot_output_dir / "BENCHMARK.md",
+            "plots_dir": device_snapshot_output_dir / "plots",
+        }
+
+    refresh_latest_indices(
+        latest_root_dir=git_snapshot_output_dir,
         root_index_path=root_index_path,
-        git_snapshot_output_dir=git_snapshot_output_dir,
-    )
-    snapshot_metadata = load_metadata(snapshot_paths["metadata_json"])
-    root_index_path.write_text(
-        build_root_index_markdown(git_snapshot_output_dir, snapshot_metadata)
     )
     return snapshot_paths
 
@@ -684,7 +762,7 @@ def render_result_report(
     summary_csv_path: Path | None = None,
     refresh_root_index: bool = False,
     root_index_path: Path = ROOT_COMPONENT_ABLATION_INDEX_PATH,
-    git_snapshot_output_dir: Path = GIT_TRACKED_LATEST_RESULTS_PATH,
+    git_snapshot_output_dir: Path = GIT_TRACKED_LATEST_RESULTS_ROOT,
 ) -> dict[str, Path]:
     if output_dir is None and summary_csv_path is None:
         raise ValueError(
@@ -767,7 +845,8 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "Refresh the repo-root BENCHMARK_COMPONENT_ABLATION.md index "
-            "and republish the git-tracked latest snapshot."
+            "and republish the git-tracked latest device snapshot under "
+            "results/llama_component_ablation_prefill/latest/<device_slug>/."
         ),
     )
     return parser
@@ -785,8 +864,8 @@ def main() -> int:
     print(f"Plots: {result_paths['plots_dir']}")
     if args.refresh_root_index:
         print(
-            "Git-tracked latest snapshot: "
-            f"{GIT_TRACKED_LATEST_RESULTS_PATH}"
+            "Git-tracked latest snapshots root: "
+            f"{GIT_TRACKED_LATEST_RESULTS_ROOT}"
         )
         print(
             "Root BENCHMARK index: "

@@ -22,6 +22,7 @@ def _load_test_modules():
         calculate_llama_prefill_flops,
         get_llama_config_7B,
     )
+    from scripts.benchmarks.device_snapshot import normalize_device_slug
     from scripts.benchmarks.render_llama_component_ablation_report import (
         configure_metric_axis,
         render_result_report,
@@ -43,6 +44,7 @@ def _load_test_modules():
         get_llama_config_7B,
         plt,
         configure_metric_axis,
+        normalize_device_slug,
         render_result_report,
         DEFAULT_PROMPT_LENGTHS,
         OLD_DEFAULT_PROMPT_LENGTHS,
@@ -59,6 +61,7 @@ def _load_test_modules():
     get_llama_config_7B,
     plt,
     configure_metric_axis,
+    normalize_device_slug,
     render_result_report,
     DEFAULT_PROMPT_LENGTHS,
     OLD_DEFAULT_PROMPT_LENGTHS,
@@ -235,6 +238,16 @@ class TestLlamaComponentAblationBenchmark(unittest.TestCase):
         finally:
             plt.close(fig)
 
+    def test_device_slug_normalization(self) -> None:
+        self.assertEqual(
+            normalize_device_slug("NVIDIA A100-SXM4-40GB"),
+            "a100_40g_sxm",
+        )
+        self.assertEqual(
+            normalize_device_slug("NVIDIA A100-PCIE-40GB"),
+            "a100_40g_pcie",
+        )
+
     def test_write_summary_csv_includes_switch_columns(self) -> None:
         rows = [
             self._make_row("13B", 2048, "baseline", "ok"),
@@ -324,6 +337,9 @@ class TestLlamaComponentAblationBenchmark(unittest.TestCase):
             temp_path = Path(temp_dir)
             output_dir = temp_path / "results" / "run1"
             latest_output_dir = temp_path / "results" / "latest"
+            device_output_dir = latest_output_dir / normalize_device_slug(
+                "NVIDIA A100 40GB"
+            )
             output_dir.mkdir(parents=True)
             summary_csv_path = output_dir / "summary.csv"
             metadata_path = output_dir / "metadata.json"
@@ -371,6 +387,9 @@ class TestLlamaComponentAblationBenchmark(unittest.TestCase):
 
             benchmark_md = (output_dir / "BENCHMARK.md").read_text()
             root_index_md = root_index_path.read_text()
+            latest_root_benchmark_md = (
+                latest_output_dir / "BENCHMARK.md"
+            ).read_text()
             metadata = json.loads(metadata_path.read_text())
 
             self.assertIn("![TTFT](plots/ttft_ms.png)", benchmark_md)
@@ -407,7 +426,10 @@ class TestLlamaComponentAblationBenchmark(unittest.TestCase):
                 str(latest_output_dir / "BENCHMARK.md"),
                 root_index_md,
             )
+            self.assertIn(str(device_output_dir / "BENCHMARK.md"), root_index_md)
             self.assertIn(str(output_dir), root_index_md)
+            self.assertIn("`a100_40g`", root_index_md)
+            self.assertIn("`a100_40g`", latest_root_benchmark_md)
             self.assertEqual(
                 metadata["report_prompt_lengths"],
                 [16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192],
@@ -425,6 +447,9 @@ class TestLlamaComponentAblationBenchmark(unittest.TestCase):
             self.assertEqual(metadata["excluded_prompt_lengths"], [16384])
             self.assertEqual(metadata["warmup"], 5)
             self.assertEqual(metadata["repeat"], 10)
+            self.assertFalse((latest_output_dir / "summary.csv").exists())
+            self.assertTrue((device_output_dir / "summary.csv").exists())
+            self.assertTrue((device_output_dir / "metadata.json").exists())
 
             for plot_name in [
                 "ttft_ms.png",
@@ -436,7 +461,7 @@ class TestLlamaComponentAblationBenchmark(unittest.TestCase):
                 self.assertTrue(plot_path.exists())
                 self.assertGreater(plot_path.stat().st_size, 0)
                 self.assertTrue(
-                    (latest_output_dir / "plots" / plot_name).exists()
+                    (device_output_dir / "plots" / plot_name).exists()
                 )
 
 

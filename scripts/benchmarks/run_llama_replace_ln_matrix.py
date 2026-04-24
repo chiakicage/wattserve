@@ -173,7 +173,7 @@ def run_llama_replace_ln_matrix(
     warmup: int,
     repeat: int,
     monitor_interval: float,
-    refresh_root_index: bool = True,
+    refresh_root_index: bool = False,
     root_index_path: Path = ROOT_BENCHMARK_INDEX_PATH,
 ) -> list[dict[str, Any]]:
     bench_llama = _load_bench_llama_module()
@@ -278,12 +278,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="GPU monitor sampling interval in seconds.",
     )
     parser.add_argument(
-        "--skip_root_index",
+        "--publish_latest",
         action="store_true",
         help=(
-            "Do not refresh the repo-root BENCHMARK.md index or republish "
-            "the git-tracked latest snapshot."
+            "Refresh the repo-root BENCHMARK.md index and republish the "
+            "git-tracked latest device snapshot under "
+            "results/llama_replace_ln_prefill/latest/<device_slug>/."
         ),
+    )
+    parser.add_argument(
+        "--skip_root_index",
+        action="store_true",
+        help=argparse.SUPPRESS,
     )
     return parser
 
@@ -291,6 +297,10 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
+    if args.publish_latest and args.skip_root_index:
+        parser.error(
+            "--publish_latest and --skip_root_index cannot be used together"
+        )
     output_dir = args.output_dir or (
         DEFAULT_RESULTS_ROOT / _timestamp_for_path()
     )
@@ -300,11 +310,11 @@ def main() -> int:
         warmup=args.warmup,
         repeat=args.repeat,
         monitor_interval=args.monitor_interval,
-        refresh_root_index=not args.skip_root_index,
+        refresh_root_index=args.publish_latest and not args.skip_root_index,
     )
     print(f"Summary CSV: {output_dir / 'summary.csv'}")
     print(f"Result BENCHMARK.md: {output_dir / 'BENCHMARK.md'}")
-    if not args.skip_root_index:
+    if args.publish_latest and not args.skip_root_index:
         print(f"Root BENCHMARK index: {ROOT_BENCHMARK_INDEX_PATH}")
     return 0
 
