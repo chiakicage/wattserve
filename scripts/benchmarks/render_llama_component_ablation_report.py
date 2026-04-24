@@ -9,7 +9,9 @@ from typing import Any
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-ROOT_BENCHMARK_INDEX_PATH = REPO_ROOT / "BENCHMARK.md"
+ROOT_COMPONENT_ABLATION_INDEX_PATH = (
+    REPO_ROOT / "BENCHMARK_COMPONENT_ABLATION.md"
+)
 DEFAULT_MODELS = ["7B", "13B", "34B", "70B"]
 DEFAULT_PROMPT_LENGTHS = [
     16,
@@ -23,8 +25,15 @@ DEFAULT_PROMPT_LENGTHS = [
     4096,
     8192,
 ]
-DEFAULT_VARIANTS = ["baseline", "replace_ln"]
+DEFAULT_VARIANTS = [
+    "baseline",
+    "replace_ln",
+    "replace_attention",
+    "replace_rope",
+    "replace_activation",
+]
 PLOT_METRICS = [
+    ("ttft_ms", "TTFT (ms)"),
     ("prefill_tflops_s", "Prefill TFLOPs/s"),
     ("avg_power_watts", "Avg Power (W)"),
     ("avg_gpu_clock_mhz", "Avg GPU Clock (MHz)"),
@@ -37,6 +46,28 @@ METRIC_AXIS_CONFIG = {
     "avg_gpu_clock_mhz": {
         "ylim": (1050, 1450),
         "yticks": [1100, 1200, 1300, 1400],
+    },
+}
+VARIANT_STYLES = {
+    "baseline": {
+        "color": "#1f77b4",
+        "label": "baseline",
+    },
+    "replace_ln": {
+        "color": "#d62728",
+        "label": "replace_ln",
+    },
+    "replace_attention": {
+        "color": "#2ca02c",
+        "label": "replace_attention",
+    },
+    "replace_rope": {
+        "color": "#ff7f0e",
+        "label": "replace_rope",
+    },
+    "replace_activation": {
+        "color": "#9467bd",
+        "label": "replace_activation",
     },
 }
 PLOT_FIGSIZE = (16, 12)
@@ -67,6 +98,10 @@ def _prompt_lengths_display(prompt_lengths: list[int]) -> str:
     return "/".join(str(prompt_len) for prompt_len in prompt_lengths)
 
 
+def _variants_display(variants: list[str]) -> str:
+    return "/".join(variants)
+
+
 def _sort_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     model_order = {model: index for index, model in enumerate(DEFAULT_MODELS)}
     prompt_order = {
@@ -83,6 +118,7 @@ def _sort_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             prompt_order.get(int(row["prompt_len"]), len(prompt_order)),
             int(row["prompt_len"]),
             variant_order.get(str(row["variant"]), len(variant_order)),
+            str(row["variant"]),
         ),
     )
 
@@ -103,10 +139,17 @@ def write_metadata_json(metadata_path: Path, metadata: dict[str, Any]) -> None:
 
 
 def _standard_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    standard_prompt_lengths = set(DEFAULT_PROMPT_LENGTHS)
     return [
         row
         for row in rows
-        if int(row["prompt_len"]) in set(DEFAULT_PROMPT_LENGTHS)
+        if int(row["prompt_len"]) in standard_prompt_lengths
+    ]
+
+
+def _successful_standard_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        row for row in _standard_rows(rows) if row.get("status") == "ok"
     ]
 
 
@@ -121,25 +164,27 @@ def _excluded_prompt_lengths(rows: list[dict[str, Any]]) -> list[int]:
     )
 
 
-def _pair_success_rows(
+def _group_success_rows(
     rows: list[dict[str, Any]],
-) -> list[tuple[dict[str, Any], dict[str, Any]]]:
-    successful_rows = [
-        row for row in _standard_rows(rows) if row.get("status") == "ok"
-    ]
+) -> dict[tuple[str, int], dict[str, dict[str, Any]]]:
     grouped: dict[tuple[str, int], dict[str, dict[str, Any]]] = {}
-    for row in successful_rows:
+    for row in _successful_standard_rows(rows):
         key = (str(row["model"]), int(row["prompt_len"]))
         grouped.setdefault(key, {})[str(row["variant"])] = row
+    return grouped
 
+
+def _pair_success_rows(
+    rows: list[dict[str, Any]],
+    variant: str,
+) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    grouped = _group_success_rows(rows)
     ordered_pairs: list[tuple[dict[str, Any], dict[str, Any]]] = []
     for model in DEFAULT_MODELS:
         for prompt_len in DEFAULT_PROMPT_LENGTHS:
             variants = grouped.get((model, prompt_len), {})
-            if "baseline" in variants and "replace_ln" in variants:
-                ordered_pairs.append(
-                    (variants["baseline"], variants["replace_ln"])
-                )
+            if "baseline" in variants and variant in variants:
+                ordered_pairs.append((variants["baseline"], variants[variant]))
     return ordered_pairs
 
 
@@ -158,18 +203,17 @@ def _collect_failed_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def _collect_unpaired_success_rows(
     rows: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    paired_keys = {
-        (baseline["model"], int(baseline["prompt_len"]))
-        for baseline, _ in _pair_success_rows(rows)
-    }
-    unpaired = []
-    for row in _standard_rows(rows):
-        if row.get("status") != "ok":
-            continue
-        key = (row["model"], int(row["prompt_len"]))
-        if key not in paired_keys:
-            unpaired.append(row)
-    return _sort_rows(unpaired)
+    grouped = _group_success_rows(rows)
+    unpaired_rows = []
+    for row in _successful_standard_rows(rows):
+        key = (str(row["model"]), int(row["prompt_len"]))
+        present_variants = set(grouped.get(key, {}))
+        if row["variant"] == "baseline":
+            if len(present_variants - {"baseline"}) == 0:
+                unpaired_rows.append(row)
+        elif "baseline" not in present_variants:
+            unpaired_rows.append(row)
+    return _sort_rows(unpaired_rows)
 
 
 def _format_float(value: Any, precision: int = 2) -> str:
@@ -186,15 +230,15 @@ def _format_delta(value: float | None) -> str:
 
 def _percentage_delta(
     baseline_value: Any,
-    replace_value: Any,
+    variant_value: Any,
 ) -> float | None:
-    if baseline_value in (None, "") or replace_value in (None, ""):
+    if baseline_value in (None, "") or variant_value in (None, ""):
         return None
     baseline = float(baseline_value)
-    replace = float(replace_value)
+    variant = float(variant_value)
     if baseline == 0:
         return None
-    return ((replace - baseline) / baseline) * 100.0
+    return ((variant - baseline) / baseline) * 100.0
 
 
 def _configure_prompt_len_axis(axis: Any) -> None:
@@ -247,7 +291,7 @@ def generate_metric_plots(
 
     import matplotlib.pyplot as plt
 
-    paired_rows = _pair_success_rows(rows)
+    successful_rows = _successful_standard_rows(rows)
     plots_dir.mkdir(parents=True, exist_ok=True)
     created_paths: list[Path] = []
 
@@ -258,44 +302,35 @@ def generate_metric_plots(
         any_data = False
 
         for axis, model in zip(axes.flat, DEFAULT_MODELS):
-            model_pairs = [
-                pair for pair in paired_rows if pair[0]["model"] == model
-            ]
-            x_values = [
-                int(baseline["prompt_len"]) for baseline, _ in model_pairs
-            ]
-            baseline_values = [
-                float(baseline[metric_name]) for baseline, _ in model_pairs
-            ]
-            replace_values = [
-                float(replace[metric_name]) for _, replace in model_pairs
-            ]
-
-            if x_values:
+            plotted_variant = False
+            for variant in DEFAULT_VARIANTS:
+                model_rows = [
+                    row
+                    for row in successful_rows
+                    if row["model"] == model and row["variant"] == variant
+                ]
+                model_rows = _sort_rows(model_rows)
+                x_values = [int(row["prompt_len"]) for row in model_rows]
+                y_values = [float(row[metric_name]) for row in model_rows]
+                if not x_values:
+                    continue
+                plotted_variant = True
                 any_data = True
                 axis.plot(
                     x_values,
-                    baseline_values,
+                    y_values,
                     marker="o",
                     markersize=PLOT_MARKERSIZE,
                     linewidth=PLOT_LINEWIDTH,
-                    color="#1f77b4",
-                    label="baseline",
+                    color=VARIANT_STYLES[variant]["color"],
+                    label=VARIANT_STYLES[variant]["label"],
                 )
-                axis.plot(
-                    x_values,
-                    replace_values,
-                    marker="o",
-                    markersize=PLOT_MARKERSIZE,
-                    linewidth=PLOT_LINEWIDTH,
-                    color="#d62728",
-                    label="replace_ln",
-                )
-            else:
+
+            if not plotted_variant:
                 axis.text(
                     0.5,
                     0.5,
-                    "No paired data",
+                    "No successful data",
                     ha="center",
                     va="center",
                     transform=axis.transAxes,
@@ -323,17 +358,21 @@ def generate_metric_plots(
             _style_axis_for_presentation(axis)
             axis.grid(True, alpha=0.35, linewidth=PLOT_GRID_LINEWIDTH)
 
-        if any_data:
-            handles, labels = axes.flat[0].get_legend_handles_labels()
+        legend_entries: dict[str, Any] = {}
+        for axis in axes.flat:
+            handles, labels = axis.get_legend_handles_labels()
+            for handle, label in zip(handles, labels):
+                legend_entries[label] = handle
+        if any_data and legend_entries:
             fig.legend(
-                handles,
-                labels,
+                list(legend_entries.values()),
+                list(legend_entries.keys()),
                 loc="upper left",
                 bbox_to_anchor=(1.01, 1.0),
                 fontsize=PLOT_LEGEND_FONTSIZE,
             )
         fig.suptitle(
-            f"Llama replace_ln: {y_label}",
+            f"Llama component ablation: {y_label}",
             fontsize=PLOT_SUPTITLE_FONTSIZE,
             fontweight="bold",
         )
@@ -346,102 +385,15 @@ def generate_metric_plots(
     return created_paths
 
 
-def generate_tflops_uplift_plot(
-    rows: list[dict[str, Any]],
-    plots_dir: Path,
-) -> Path:
-    import matplotlib
-
-    matplotlib.use("Agg")
-
-    import matplotlib.pyplot as plt
-
-    paired_rows = _pair_success_rows(rows)
-    plots_dir.mkdir(parents=True, exist_ok=True)
-
-    fig, axes = plt.subplots(
-        2, 2, figsize=PLOT_FIGSIZE, constrained_layout=True
-    )
-
-    for axis, model in zip(axes.flat, DEFAULT_MODELS):
-        model_pairs = [
-            pair for pair in paired_rows if pair[0]["model"] == model
-        ]
-        x_values = [int(baseline["prompt_len"]) for baseline, _ in model_pairs]
-        uplift_values = [
-            _percentage_delta(
-                baseline["prefill_tflops_s"], replace["prefill_tflops_s"]
-            )
-            for baseline, replace in model_pairs
-        ]
-
-        if x_values and all(value is not None for value in uplift_values):
-            axis.plot(
-                x_values,
-                [float(value) for value in uplift_values if value is not None],
-                marker="o",
-                markersize=PLOT_MARKERSIZE,
-                linewidth=PLOT_LINEWIDTH,
-                color="#2ca02c",
-            )
-            axis.axhline(
-                0.0,
-                color="#7f7f7f",
-                linewidth=PLOT_GRID_LINEWIDTH + 0.3,
-                linestyle="--",
-            )
-        else:
-            axis.text(
-                0.5,
-                0.5,
-                "No paired data",
-                ha="center",
-                va="center",
-                transform=axis.transAxes,
-                fontsize=PLOT_LABEL_FONTSIZE,
-                fontweight="bold",
-            )
-
-        axis.set_title(
-            f"Llama-{model}",
-            fontsize=PLOT_AXIS_TITLE_FONTSIZE,
-            fontweight="bold",
-        )
-        axis.set_xlabel(
-            "Prompt Len",
-            fontsize=PLOT_LABEL_FONTSIZE,
-            fontweight="bold",
-        )
-        axis.set_ylabel(
-            "TFLOPs Uplift (%)",
-            fontsize=PLOT_LABEL_FONTSIZE,
-            fontweight="bold",
-        )
-        _configure_prompt_len_axis(axis)
-        _style_axis_for_presentation(axis)
-        axis.grid(True, alpha=0.35, linewidth=PLOT_GRID_LINEWIDTH)
-
-    fig.suptitle(
-        "Llama replace_ln: TFLOPs uplift vs baseline",
-        fontsize=PLOT_SUPTITLE_FONTSIZE,
-        fontweight="bold",
-    )
-
-    output_path = plots_dir / "prefill_tflops_uplift_pct.png"
-    fig.savefig(output_path, dpi=PLOT_DPI, bbox_inches="tight")
-    plt.close(fig)
-    return output_path
-
-
 def build_result_benchmark_markdown(
     rows: list[dict[str, Any]],
     output_dir: Path,
     metadata: dict[str, Any],
 ) -> str:
-    paired_rows = _pair_success_rows(rows)
     failed_rows = _collect_failed_rows(rows)
     unpaired_success_rows = _collect_unpaired_success_rows(rows)
     excluded_prompt_lengths = metadata.get("excluded_prompt_lengths", [])
+    report_variants = metadata.get("report_variants", DEFAULT_VARIANTS)
     plots_dir_display = _display_path(output_dir / "plots")
     output_dir_display = _display_path(output_dir)
     summary_csv_display = _display_path(output_dir / "summary.csv")
@@ -450,7 +402,7 @@ def build_result_benchmark_markdown(
     device_name = environment.get("cuda_device_name", "n/a")
 
     lines = [
-        "# Llama `replace_ln` Benchmark",
+        "# Llama Component Ablation Benchmark",
         "",
         f"Generated at `{metadata.get('render_generated_at_utc', metadata.get('run_started_at_utc', 'n/a'))}`.",
         "",
@@ -458,14 +410,15 @@ def build_result_benchmark_markdown(
         "",
         (
             "- Standard matrix: "
-            f"`7B/13B/34B/70B` x `{_prompt_lengths_display(DEFAULT_PROMPT_LENGTHS)}` "
-            "x `baseline/replace_ln`"
+            f"`7B/13B/34B/70B` x "
+            f"`{_prompt_lengths_display(DEFAULT_PROMPT_LENGTHS)}` x "
+            f"`{_variants_display(report_variants)}`"
         ),
         f"- Result directory: `{output_dir_display}`",
         f"- Summary CSV: `{summary_csv_display}`",
         f"- Metadata: `{metadata_display}`",
         f"- Plots directory: `{plots_dir_display}`",
-        "- `--replace_ln` is an ablation flag, not a numerically equivalent model variant.",
+        "- These variants are component ablations for performance study, not numerically equivalent model variants.",
         "- Prompt lengths outside the standard matrix are excluded from the summary tables and plots in this report.",
     ]
 
@@ -486,17 +439,22 @@ def build_result_benchmark_markdown(
             f"- Torch: `{environment.get('torch_version', 'n/a')}`",
             f"- CUDA available: `{environment.get('cuda_available', 'n/a')}`",
             f"- CUDA device: `{device_name}`",
-            f"- Warmup / repeat / monitor interval: `{metadata.get('warmup', 'n/a')}` / `{metadata.get('repeat', 'n/a')}` / `{metadata.get('monitor_interval', 'n/a')}`",
+            (
+                "- Warmup / repeat / monitor interval: "
+                f"`{metadata.get('warmup', 'n/a')}` / "
+                f"`{metadata.get('repeat', 'n/a')}` / "
+                f"`{metadata.get('monitor_interval', 'n/a')}`"
+            ),
             "",
             "## Plots",
+            "",
+            "### TTFT",
+            "",
+            "![TTFT](plots/ttft_ms.png)",
             "",
             "### Prefill TFLOPs/s",
             "",
             "![Prefill TFLOPs/s](plots/prefill_tflops_s.png)",
-            "",
-            "### TFLOPs Uplift vs Baseline",
-            "",
-            "![TFLOPs Uplift vs Baseline](plots/prefill_tflops_uplift_pct.png)",
             "",
             "### Avg Power",
             "",
@@ -505,39 +463,53 @@ def build_result_benchmark_markdown(
             "### Avg GPU Clock",
             "",
             "![Avg GPU Clock](plots/avg_gpu_clock_mhz.png)",
-            "",
-            "## Successful Pairs",
-            "",
         ]
     )
 
-    if paired_rows:
+    for variant in DEFAULT_VARIANTS:
+        if variant == "baseline":
+            continue
+        paired_rows = _pair_success_rows(rows, variant)
         lines.extend(
             [
-                "| Model | Prompt Len | baseline TFLOPs/s | replace_ln TFLOPs/s | delta TFLOPs/s | baseline TTFT (ms) | replace_ln TTFT (ms) | delta TTFT | baseline Avg Power (W) | replace_ln Avg Power (W) | delta Power | baseline Avg GPU Clock (MHz) | replace_ln Avg GPU Clock (MHz) | delta Clock |",
-                "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+                "",
+                f"## Baseline vs {variant}",
+                "",
             ]
         )
-        for baseline_row, replace_row in paired_rows:
-            lines.append(
-                "| "
-                f"{baseline_row['model']} | "
-                f"{baseline_row['prompt_len']} | "
-                f"{_format_float(baseline_row['prefill_tflops_s'])} | "
-                f"{_format_float(replace_row['prefill_tflops_s'])} | "
-                f"{_format_delta(_percentage_delta(baseline_row['prefill_tflops_s'], replace_row['prefill_tflops_s']))} | "
-                f"{_format_float(baseline_row['ttft_ms'])} | "
-                f"{_format_float(replace_row['ttft_ms'])} | "
-                f"{_format_delta(_percentage_delta(baseline_row['ttft_ms'], replace_row['ttft_ms']))} | "
-                f"{_format_float(baseline_row['avg_power_watts'])} | "
-                f"{_format_float(replace_row['avg_power_watts'])} | "
-                f"{_format_delta(_percentage_delta(baseline_row['avg_power_watts'], replace_row['avg_power_watts']))} | "
-                f"{_format_float(baseline_row['avg_gpu_clock_mhz'])} | "
-                f"{_format_float(replace_row['avg_gpu_clock_mhz'])} | "
-                f"{_format_delta(_percentage_delta(baseline_row['avg_gpu_clock_mhz'], replace_row['avg_gpu_clock_mhz']))} |"
+        if paired_rows:
+            lines.extend(
+                [
+                    "| Model | Prompt Len | baseline TTFT (ms) | "
+                    f"{variant} TTFT (ms) | delta TTFT | baseline TFLOPs/s | "
+                    f"{variant} TFLOPs/s | delta TFLOPs/s | "
+                    "baseline Avg Power (W) | "
+                    f"{variant} Avg Power (W) | delta Power | "
+                    "baseline Avg GPU Clock (MHz) | "
+                    f"{variant} Avg GPU Clock (MHz) | delta Clock |",
+                    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+                ]
             )
-    else:
-        lines.append("No paired successful runs were recorded.")
+            for baseline_row, variant_row in paired_rows:
+                lines.append(
+                    "| "
+                    f"{baseline_row['model']} | "
+                    f"{baseline_row['prompt_len']} | "
+                    f"{_format_float(baseline_row['ttft_ms'])} | "
+                    f"{_format_float(variant_row['ttft_ms'])} | "
+                    f"{_format_delta(_percentage_delta(baseline_row['ttft_ms'], variant_row['ttft_ms']))} | "
+                    f"{_format_float(baseline_row['prefill_tflops_s'])} | "
+                    f"{_format_float(variant_row['prefill_tflops_s'])} | "
+                    f"{_format_delta(_percentage_delta(baseline_row['prefill_tflops_s'], variant_row['prefill_tflops_s']))} | "
+                    f"{_format_float(baseline_row['avg_power_watts'])} | "
+                    f"{_format_float(variant_row['avg_power_watts'])} | "
+                    f"{_format_delta(_percentage_delta(baseline_row['avg_power_watts'], variant_row['avg_power_watts']))} | "
+                    f"{_format_float(baseline_row['avg_gpu_clock_mhz'])} | "
+                    f"{_format_float(variant_row['avg_gpu_clock_mhz'])} | "
+                    f"{_format_delta(_percentage_delta(baseline_row['avg_gpu_clock_mhz'], variant_row['avg_gpu_clock_mhz']))} |"
+                )
+        else:
+            lines.append("No paired successful runs were recorded.")
 
     lines.extend(
         [
@@ -592,12 +564,19 @@ def build_root_index_markdown(
     plots_dir = latest_output_dir / "plots"
 
     lines = [
-        "# Latest Llama `replace_ln` Benchmark",
+        "# Latest Llama Component Ablation Benchmark",
         "",
-        "This file indexes the latest canonical Llama benchmark report.",
+        "This file indexes the latest multi-component Llama ablation benchmark report.",
         "",
         f"- Latest result directory: `{latest_dir_display}`",
-        f"- Standard prompt lengths: `{_prompt_lengths_display(DEFAULT_PROMPT_LENGTHS)}`",
+        (
+            "- Standard prompt lengths: "
+            f"`{_prompt_lengths_display(DEFAULT_PROMPT_LENGTHS)}`"
+        ),
+        (
+            "- Variants: "
+            f"`{_variants_display(metadata.get('report_variants', DEFAULT_VARIANTS))}`"
+        ),
         f"- Latest report: [{_display_path(report_path)}]({_display_path(report_path)})",
         f"- Latest summary CSV: [{_display_path(summary_path)}]({_display_path(summary_path)})",
         f"- Latest metadata: [{_display_path(metadata_path)}]({_display_path(metadata_path)})",
@@ -617,7 +596,7 @@ def render_result_report(
     output_dir: Path | None = None,
     summary_csv_path: Path | None = None,
     refresh_root_index: bool = False,
-    root_index_path: Path = ROOT_BENCHMARK_INDEX_PATH,
+    root_index_path: Path = ROOT_COMPONENT_ABLATION_INDEX_PATH,
 ) -> dict[str, Path]:
     if output_dir is None and summary_csv_path is None:
         raise ValueError(
@@ -641,12 +620,12 @@ def render_result_report(
     rows = load_summary_rows(summary_csv_path)
     metadata = load_metadata(metadata_path)
     plot_paths = generate_metric_plots(rows, plots_dir)
-    plot_paths.append(generate_tflops_uplift_plot(rows, plots_dir))
 
     metadata["benchmark_markdown"] = str(benchmark_md_path)
     metadata["plots_dir"] = str(plots_dir)
     metadata["plot_files"] = [str(path) for path in plot_paths]
     metadata["report_prompt_lengths"] = DEFAULT_PROMPT_LENGTHS
+    metadata["report_variants"] = DEFAULT_VARIANTS
     metadata["excluded_prompt_lengths"] = _excluded_prompt_lengths(rows)
     metadata["render_generated_at_utc"] = _utc_now_iso()
     write_metadata_json(metadata_path, metadata)
@@ -673,7 +652,10 @@ def render_result_report(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Render plots and BENCHMARK.md for a Llama benchmark result directory."
+        description=(
+            "Render plots and BENCHMARK.md for a Llama component ablation "
+            "benchmark result directory."
+        )
     )
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
@@ -684,18 +666,15 @@ def build_parser() -> argparse.ArgumentParser:
     group.add_argument(
         "--summary_csv",
         type=Path,
-        help="Path to a summary.csv file. The parent directory is treated as the result directory.",
+        help=(
+            "Path to a summary.csv file. The parent directory is treated "
+            "as the result directory."
+        ),
     )
     parser.add_argument(
         "--refresh_root_index",
         action="store_true",
-        help="Refresh the repo-root BENCHMARK.md index to point at this result directory.",
-    )
-    parser.add_argument(
-        "--root_index_path",
-        type=Path,
-        default=ROOT_BENCHMARK_INDEX_PATH,
-        help="Path to the repo-root BENCHMARK.md index file.",
+        help="Refresh the repo-root BENCHMARK_COMPONENT_ABLATION.md index.",
     )
     return parser
 
@@ -707,12 +686,14 @@ def main() -> int:
         output_dir=args.output_dir,
         summary_csv_path=args.summary_csv,
         refresh_root_index=args.refresh_root_index,
-        root_index_path=args.root_index_path,
     )
-    print(f"Result BENCHMARK.md: {result_paths['benchmark_markdown']}")
-    print(f"Plots directory: {result_paths['plots_dir']}")
+    print(f"BENCHMARK.md: {result_paths['benchmark_markdown']}")
+    print(f"Plots: {result_paths['plots_dir']}")
     if args.refresh_root_index:
-        print(f"Root BENCHMARK index: {args.root_index_path}")
+        print(
+            "Root BENCHMARK index: "
+            f"{ROOT_COMPONENT_ABLATION_INDEX_PATH}"
+        )
     return 0
 
 

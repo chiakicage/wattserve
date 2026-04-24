@@ -98,6 +98,7 @@ docstring-code-line-length = "dynamic"
 dev = [
     "matplotlib>=3.10.8",
     "pre-commit>=4.5.1",
+    "pytest>=9.0.3",
     "ruff>=0.15.10",
     "seaborn>=0.13.2",
 ]

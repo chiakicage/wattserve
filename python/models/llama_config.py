@@ -107,6 +107,10 @@ def calculate_llama_prefill_flops(
     config: LlamaConfig,
     prompt_len: int,
     num_hidden_layers: int | None = None,
+    replace_ln: bool = False,
+    replace_attention: bool = False,
+    replace_rope: bool = False,
+    replace_activation: bool = False,
 ) -> int:
     """
     Estimate prefill FLOPs for one forward pass.
@@ -115,11 +119,13 @@ def calculate_llama_prefill_flops(
     - projections and MLP dominate linear algebra cost
     - attention score/value cost is approximated with hidden_size
     - elementwise ops such as RMSNorm are intentionally omitted
+    - only replace_attention changes the counted matmul path
     """
     assert config.hidden_size is not None
     assert config.intermediate_size is not None
     assert config.num_attention_heads is not None
     assert config.num_key_value_heads is not None
+    del replace_ln, replace_rope, replace_activation
 
     num_layers = (
         config.num_hidden_layers
@@ -136,8 +142,12 @@ def calculate_llama_prefill_flops(
     seq_len = prompt_len
 
     qkv_flops = seq_len * hidden_size * (q_size + 2 * kv_size)
-    attn_scores_flops = seq_len * seq_len * q_size
-    attn_values_flops = seq_len * seq_len * q_size
+    if replace_attention:
+        attn_scores_flops = 0
+        attn_values_flops = 0
+    else:
+        attn_scores_flops = seq_len * seq_len * q_size
+        attn_values_flops = seq_len * seq_len * q_size
     out_proj_flops = seq_len * q_size * hidden_size
     ffn_flops = 3 * seq_len * hidden_size * intermediate_size
 

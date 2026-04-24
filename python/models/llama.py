@@ -1,5 +1,6 @@
 """Inference-only LLaMA model compatible with HuggingFace weights."""
 
+from dataclasses import dataclass
 from typing import Optional
 
 import torch
@@ -15,8 +16,17 @@ from flashinfer import (
 )
 
 __all__ = [
+    "LlamaAblationConfig",
     "LlamaModel",
 ]
+
+
+@dataclass(frozen=True)
+class LlamaAblationConfig:
+    replace_ln: bool = False
+    replace_attention: bool = False
+    replace_rope: bool = False
+    replace_activation: bool = False
 
 
 class RMSNorm(nn.Module):
@@ -24,19 +34,19 @@ class RMSNorm(nn.Module):
         self,
         hidden_size: int,
         eps: float = 1e-6,
-        replace_ln: bool = False,
+        ablation_config: LlamaAblationConfig | None = None,
     ) -> None:
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
-        self.replace_ln = replace_ln
+        self.ablation_config = ablation_config or LlamaAblationConfig()
 
     def forward(
         self,
         x: torch.Tensor,
         residual: Optional[torch.Tensor] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        if self.replace_ln:
+        if self.ablation_config.replace_ln:
             residual = x
             return x, residual
         if residual is not None:
@@ -52,9 +62,11 @@ class LlamaMLP(nn.Module):
         self,
         hidden_size: int,
         intermediate_size: int,
+        ablation_config: LlamaAblationConfig | None = None,
     ) -> None:
         super().__init__()
         self.intermediate_size = intermediate_size
+        self.ablation_config = ablation_config or LlamaAblationConfig()
         self.gate_proj = nn.Linear(
             hidden_size,
             intermediate_size,
@@ -72,10 +84,13 @@ class LlamaMLP(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x1 = self.gate_proj(x)
-        x2 = self.up_proj(x)
-        x = torch.cat([x1, x2], dim=-1)
-        x = silu_and_mul(x)
+        gate = self.gate_proj(x)
+        up = self.up_proj(x)
+        if self.ablation_config.replace_activation:
+            x = up
+        else:
+            x = torch.cat([gate, up], dim=-1)
+            x = silu_and_mul(x)
         x = self.down_proj(x)
         return x
 
@@ -88,12 +103,13 @@ class LlamaAttention(nn.Module):
         num_heads: int,
         num_kv_heads: int,
         rope_theta: float = 10000,
-        replace_ln: bool = False,
+        ablation_config: LlamaAblationConfig | None = None,
     ) -> None:
         super().__init__()
         self.hidden_size = hidden_size
         self.num_heads = num_heads
         self.num_kv_heads = num_kv_heads
+        self.ablation_config = ablation_config or LlamaAblationConfig()
         head_dim = getattr(config, "head_dim", None)
         if head_dim is None:
             head_dim = self.hidden_size // self.num_heads
@@ -127,10 +143,14 @@ class LlamaAttention(nn.Module):
 
         assert config.rms_norm_eps is not None
         self.q_norm = RMSNorm(
-            self.head_dim, eps=config.rms_norm_eps, replace_ln=replace_ln
+            self.head_dim,
+            eps=config.rms_norm_eps,
+            ablation_config=self.ablation_config,
         )
         self.k_norm = RMSNorm(
-            self.head_dim, eps=config.rms_norm_eps, replace_ln=replace_ln
+            self.head_dim,
+            eps=config.rms_norm_eps,
+            ablation_config=self.ablation_config,
         )
 
     def forward(
@@ -146,17 +166,21 @@ class LlamaAttention(nn.Module):
         v = v.view(-1, self.num_kv_heads, self.head_dim)
         q, _ = self.q_norm(q)
         k, _ = self.k_norm(k)
-        q, k = apply_rope_pos_ids(
-            q,
-            k,
-            positions,
-            rotary_dim=self.head_dim,
-            rope_theta=self.rope_theta,
-        )
-        o = single_prefill_with_kv_cache(
-            q, k, v, causal=True, sm_scale=self.scaling
-        )
-        o = o.view(-1, self.q_size)
+        if not self.ablation_config.replace_rope:
+            q, k = apply_rope_pos_ids(
+                q,
+                k,
+                positions,
+                rotary_dim=self.head_dim,
+                rope_theta=self.rope_theta,
+            )
+        if self.ablation_config.replace_attention:
+            o = q
+        else:
+            o = single_prefill_with_kv_cache(
+                q, k, v, causal=True, sm_scale=self.scaling
+            )
+        o = o.reshape(-1, self.q_size)
         output = self.o_proj(o)
         return output
 
@@ -166,7 +190,7 @@ class LlamaDecoderLayer(nn.Module):
         self,
         config: LlamaConfig,
         layer_idx: int,
-        replace_ln: bool = False,
+        ablation_config: LlamaAblationConfig | None = None,
     ) -> None:
         super().__init__()
         assert config.hidden_size is not None
@@ -176,6 +200,7 @@ class LlamaDecoderLayer(nn.Module):
         self.hidden_size = config.hidden_size
         rope_theta = getattr(config, "rope_theta", 10000)
         self.layer_idx = layer_idx
+        self.ablation_config = ablation_config or LlamaAblationConfig()
 
         self.self_attn = LlamaAttention(
             config=config,
@@ -185,21 +210,22 @@ class LlamaDecoderLayer(nn.Module):
                 config, "num_key_value_heads", config.num_attention_heads
             ),
             rope_theta=rope_theta,
-            replace_ln=replace_ln,
+            ablation_config=self.ablation_config,
         )
         self.mlp = LlamaMLP(
             hidden_size=self.hidden_size,
             intermediate_size=config.intermediate_size,
+            ablation_config=self.ablation_config,
         )
         self.input_layernorm = RMSNorm(
             config.hidden_size,
             eps=config.rms_norm_eps,
-            replace_ln=replace_ln,
+            ablation_config=self.ablation_config,
         )
         self.post_attention_layernorm = RMSNorm(
             config.hidden_size,
             eps=config.rms_norm_eps,
-            replace_ln=replace_ln,
+            ablation_config=self.ablation_config,
         )
 
     def forward(
@@ -227,10 +253,19 @@ class LlamaModel(nn.Module):
         self,
         config: LlamaConfig,
         replace_ln: bool = False,
+        replace_attention: bool = False,
+        replace_rope: bool = False,
+        replace_activation: bool = False,
     ):
         super().__init__()
 
         self.config = config
+        self.ablation_config = LlamaAblationConfig(
+            replace_ln=replace_ln,
+            replace_attention=replace_attention,
+            replace_rope=replace_rope,
+            replace_activation=replace_activation,
+        )
         assert config.num_hidden_layers is not None
         assert config.hidden_size is not None
         assert config.rms_norm_eps is not None
@@ -241,14 +276,14 @@ class LlamaModel(nn.Module):
         self.norm = RMSNorm(
             config.hidden_size,
             eps=config.rms_norm_eps,
-            replace_ln=replace_ln,
+            ablation_config=self.ablation_config,
         )
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
         for i in self.layer_indices:
             self.layers[str(i)] = LlamaDecoderLayer(
                 config=config,
                 layer_idx=i,
-                replace_ln=replace_ln,
+                ablation_config=self.ablation_config,
             )
 
     def clear_kv_cache(self) -> None:

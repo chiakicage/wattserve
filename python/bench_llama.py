@@ -32,6 +32,12 @@ DEFAULT_REPEAT = 10
 DEFAULT_MONITOR_INTERVAL = 0.01
 SUCCESS_STATUS = "ok"
 ERROR_STATUS = "error"
+ABLATION_FLAG_ORDER = (
+    "replace_ln",
+    "replace_attention",
+    "replace_rope",
+    "replace_activation",
+)
 
 RESULT_FIELDNAMES = [
     "run_timestamp_utc",
@@ -39,6 +45,9 @@ RESULT_FIELDNAMES = [
     "prompt_len",
     "variant",
     "replace_ln",
+    "replace_attention",
+    "replace_rope",
+    "replace_activation",
     "status",
     "error_type",
     "error_message",
@@ -69,8 +78,40 @@ def generate_random_input_ids(
     return torch.randint(0, vocab_size, (prompt_len,), device=device)
 
 
-def get_variant_name(replace_ln: bool) -> str:
-    return "replace_ln" if replace_ln else "baseline"
+def build_ablation_flags(
+    replace_ln: bool = False,
+    replace_attention: bool = False,
+    replace_rope: bool = False,
+    replace_activation: bool = False,
+) -> dict[str, bool]:
+    return {
+        "replace_ln": replace_ln,
+        "replace_attention": replace_attention,
+        "replace_rope": replace_rope,
+        "replace_activation": replace_activation,
+    }
+
+
+def get_variant_name(
+    replace_ln: bool = False,
+    replace_attention: bool = False,
+    replace_rope: bool = False,
+    replace_activation: bool = False,
+) -> str:
+    ablation_flags = build_ablation_flags(
+        replace_ln=replace_ln,
+        replace_attention=replace_attention,
+        replace_rope=replace_rope,
+        replace_activation=replace_activation,
+    )
+    enabled_flags = [
+        flag_name
+        for flag_name in ABLATION_FLAG_ORDER
+        if ablation_flags[flag_name]
+    ]
+    if not enabled_flags:
+        return "baseline"
+    return "+".join(enabled_flags)
 
 
 def _utc_now_iso() -> str:
@@ -81,15 +122,24 @@ def create_result_record(
     config_name: str,
     prompt_len: int,
     replace_ln: bool,
+    replace_attention: bool,
+    replace_rope: bool,
+    replace_activation: bool,
     warmup: int,
     repeat: int,
 ) -> dict[str, Any]:
+    ablation_flags = build_ablation_flags(
+        replace_ln=replace_ln,
+        replace_attention=replace_attention,
+        replace_rope=replace_rope,
+        replace_activation=replace_activation,
+    )
     return {
         "run_timestamp_utc": _utc_now_iso(),
         "model": config_name,
         "prompt_len": prompt_len,
-        "variant": get_variant_name(replace_ln),
-        "replace_ln": replace_ln,
+        "variant": get_variant_name(**ablation_flags),
+        **ablation_flags,
         "status": ERROR_STATUS,
         "error_type": "",
         "error_message": "",
@@ -174,18 +224,27 @@ def _summarize_monitor_results(
 def benchmark(
     config_name: str,
     prompt_len: int,
-    replace_ln: bool,
+    replace_ln: bool = False,
+    replace_attention: bool = False,
+    replace_rope: bool = False,
+    replace_activation: bool = False,
     warmup: int = DEFAULT_WARMUP,
     repeat: int = DEFAULT_REPEAT,
     monitor_interval: float = DEFAULT_MONITOR_INTERVAL,
     monitor_csv_path: str | None = None,
 ) -> dict[str, Any]:
+    ablation_flags = build_ablation_flags(
+        replace_ln=replace_ln,
+        replace_attention=replace_attention,
+        replace_rope=replace_rope,
+        replace_activation=replace_activation,
+    )
     result = create_result_record(
         config_name=config_name,
         prompt_len=prompt_len,
-        replace_ln=replace_ln,
         warmup=warmup,
         repeat=repeat,
+        **ablation_flags,
     )
     monitor: GPUMonitor | None = None
 
@@ -212,7 +271,7 @@ def benchmark(
         torch.set_default_dtype(torch.bfloat16)
 
         with torch.device("cuda:0"):
-            model = LlamaModel(config, replace_ln=replace_ln)
+            model = LlamaModel(config, **ablation_flags)
 
         input_ids = generate_random_input_ids(prompt_len, config.vocab_size)
         position_ids = torch.arange(prompt_len, device=input_ids.device)
@@ -240,7 +299,11 @@ def benchmark(
         monitor_results = monitor.get_results()
         monitor_summary = _summarize_monitor_results(monitor_results)
 
-        total_flops = calculate_llama_prefill_flops(config, prompt_len)
+        total_flops = calculate_llama_prefill_flops(
+            config,
+            prompt_len,
+            **ablation_flags,
+        )
         result.update(monitor_summary)
         result["ttft_ms"] = ttft_seconds * 1000.0
         result["prefill_tflops_s"] = total_flops / 1e12 / ttft_seconds
@@ -367,6 +430,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run the replace_ln ablation instead of the baseline path.",
     )
     parser.add_argument(
+        "--replace_attention",
+        action="store_true",
+        help="Bypass the attention kernel while keeping QKV and o_proj.",
+    )
+    parser.add_argument(
+        "--replace_rope",
+        action="store_true",
+        help="Skip RoPE application while keeping the rest of attention.",
+    )
+    parser.add_argument(
+        "--replace_activation",
+        action="store_true",
+        help="Skip silu_and_mul and feed up_proj directly into down_proj.",
+    )
+    parser.add_argument(
         "--warmup",
         type=int,
         default=DEFAULT_WARMUP,
@@ -401,6 +479,9 @@ def main() -> int:
         config_name=args.model,
         prompt_len=args.prompt_len,
         replace_ln=args.replace_ln,
+        replace_attention=args.replace_attention,
+        replace_rope=args.replace_rope,
+        replace_activation=args.replace_activation,
         warmup=args.warmup,
         repeat=args.repeat,
         monitor_interval=args.monitor_interval,

@@ -6,8 +6,12 @@ WattServe is an experimental LLM serving and benchmarking repository focused on 
 
 This repository uses `uv` and keeps the active virtual environment in `.venv`.
 
+Unless noted otherwise, run commands from the repository root. If you are
+invoking `fish -lc` from elsewhere, replace `<repo_root>` with your local
+`wattserve` checkout path.
+
 ```sh
-fish -lc 'source /home/cage/wattserve/.venv/bin/activate.fish; uv sync'
+fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; uv sync'
 ```
 
 If you want to change the index URL of pip in uv, you can modify `~/.config/uv/uv.toml`:
@@ -19,8 +23,8 @@ index-url = "https://mirrors.zju.edu.cn/pypi/web/simple"
 ## Development
 
 ```sh
-fish -lc 'source /home/cage/wattserve/.venv/bin/activate.fish; uv sync --dev'
-fish -lc 'source /home/cage/wattserve/.venv/bin/activate.fish; pre-commit install'
+fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; uv sync --dev'
+fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; pre-commit install'
 ```
 
 ## Llama Benchmarking
@@ -30,13 +34,21 @@ fish -lc 'source /home/cage/wattserve/.venv/bin/activate.fish; pre-commit instal
 Baseline:
 
 ```sh
-fish -lc 'source /home/cage/wattserve/.venv/bin/activate.fish; python python/bench_llama.py --model 13B --prompt_len 4096'
+fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python python/bench_llama.py --model 13B --prompt_len 4096'
 ```
 
 `replace_ln` ablation:
 
 ```sh
-fish -lc 'source /home/cage/wattserve/.venv/bin/activate.fish; python python/bench_llama.py --model 13B --prompt_len 4096 --replace_ln'
+fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python python/bench_llama.py --model 13B --prompt_len 4096 --replace_ln'
+```
+
+Other component ablations:
+
+```sh
+fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python python/bench_llama.py --model 13B --prompt_len 4096 --replace_attention'
+fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python python/bench_llama.py --model 13B --prompt_len 4096 --replace_rope'
+fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python python/bench_llama.py --model 13B --prompt_len 4096 --replace_activation'
 ```
 
 Optional controls:
@@ -45,13 +57,14 @@ Optional controls:
 - `--repeat`: timed iterations averaged into TTFT, default `10`
 - `--monitor_interval`: NVML sampling interval in seconds, default `0.01`
 - `--monitor_csv_path`: optional path for exporting the raw GPU monitor trace
+- `--replace_attention` / `--replace_rope` / `--replace_activation`: additional component ablation switches that can also be combined manually with `--replace_ln`
 
 ### Batch `replace_ln` Matrix
 
 Run the fixed benchmark matrix:
 
 ```sh
-fish -lc 'source /home/cage/wattserve/.venv/bin/activate.fish; python scripts/benchmarks/run_llama_replace_ln_matrix.py'
+fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python scripts/benchmarks/run_llama_replace_ln_matrix.py'
 ```
 
 The batch runner benchmarks:
@@ -78,18 +91,57 @@ Each run writes:
 
 The batch runner also refreshes the repo-root `BENCHMARK.md` index so it points to the latest result directory and its local report.
 
+### Batch Component Ablation Matrix
+
+Run the fixed component ablation matrix:
+
+```sh
+fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python scripts/benchmarks/run_llama_component_ablation_matrix.py'
+```
+
+The component ablation runner benchmarks:
+
+- models: `7B`, `13B`, `34B`, `70B`
+- prompt lengths: `16`, `32`, `64`, `128`, `256`, `512`, `1024`, `2048`, `4096`, `8192`
+- variants: `baseline`, `replace_ln`, `replace_attention`, `replace_rope`, `replace_activation`
+
+By default, the component ablation runner also uses `warmup=5`, `repeat=10`, and `monitor_interval=0.01`.
+
+The default output directory is:
+
+```text
+results/llama_component_ablation_prefill/<UTC_TIMESTAMP>/
+```
+
+Each run writes the same result-local artifacts as the `replace_ln` matrix:
+
+- `summary.csv`
+- `metadata.json`
+- `plots/*.png`
+- `BENCHMARK.md`
+- `monitor/*.csv`
+
+The component ablation runner refreshes the repo-root `BENCHMARK_COMPONENT_ABLATION.md` index so it points to the latest component ablation result directory and local report.
+
 ### Re-render Report and Plots
 
 You can regenerate plots and the result-local `BENCHMARK.md` from an existing result directory:
 
 ```sh
-fish -lc 'source /home/cage/wattserve/.venv/bin/activate.fish; python scripts/benchmarks/render_llama_replace_ln_report.py --output_dir results/llama_replace_ln_prefill/<UTC_TIMESTAMP>'
+fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python scripts/benchmarks/render_llama_replace_ln_report.py --output_dir results/llama_replace_ln_prefill/<UTC_TIMESTAMP>'
 ```
 
 To also refresh the repo-root `BENCHMARK.md` index:
 
 ```sh
-fish -lc 'source /home/cage/wattserve/.venv/bin/activate.fish; python scripts/benchmarks/render_llama_replace_ln_report.py --output_dir results/llama_replace_ln_prefill/<UTC_TIMESTAMP> --refresh_root_index'
+fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python scripts/benchmarks/render_llama_replace_ln_report.py --output_dir results/llama_replace_ln_prefill/<UTC_TIMESTAMP> --refresh_root_index'
+```
+
+For component ablation results:
+
+```sh
+fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python scripts/benchmarks/render_llama_component_ablation_report.py --output_dir results/llama_component_ablation_prefill/<UTC_TIMESTAMP>'
+fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python scripts/benchmarks/render_llama_component_ablation_report.py --output_dir results/llama_component_ablation_prefill/<UTC_TIMESTAMP> --refresh_root_index'
 ```
 
 ## Benchmark Notes
@@ -145,4 +197,6 @@ In the current Llama path it bypasses the `RMSNorm` flow in `python/models/llama
 
 `LLAMA2_MAX_POSITION_EMBEDDINGS = 16384` in `python/models/llama_config.py` is only a position-length limit. The current A100 40GB fitting logic trims layer count based on persistent weight memory and does not guarantee that every long-sequence benchmark combination will fit transient activations, workspaces, or all runtime allocations. For this reason, the canonical batch matrix is limited to `16/32/64/128/256/512/1024/2048/4096/8192`, while non-standard prompt lengths should be treated as ad hoc reference runs.
 
-Latest batch results should be read from the repo-root `BENCHMARK.md` index and the linked `results/llama_replace_ln_prefill/<timestamp>/BENCHMARK.md`.
+Latest canonical `replace_ln` batch results should be read from the repo-root `BENCHMARK.md` index and the linked `results/llama_replace_ln_prefill/<timestamp>/BENCHMARK.md`.
+
+Latest multi-component ablation batch results should be read from the repo-root `BENCHMARK_COMPONENT_ABLATION.md` index and the linked `results/llama_component_ablation_prefill/<timestamp>/BENCHMARK.md`.
