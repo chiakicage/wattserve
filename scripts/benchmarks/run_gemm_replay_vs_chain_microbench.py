@@ -6,6 +6,7 @@ import csv
 import json
 import sys
 import time
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -128,6 +129,36 @@ def _recorded_mm(
     torch.mm(lhs, rhs, out=out)
     end_event.record()
     events.append((start_event, end_event))
+
+
+@contextmanager
+def _nvtx_range(torch: Any, name: str, enabled: bool):
+    if not enabled:
+        with nullcontext():
+            yield
+        return
+    try:
+        with torch.cuda.nvtx.range(name):
+            yield
+    except AttributeError:
+        with torch.autograd.profiler.record_function(name):
+            yield
+
+
+@contextmanager
+def _cuda_profiler_range(torch: Any, enabled: bool):
+    if not enabled:
+        with nullcontext():
+            yield
+        return
+    cudart = torch.cuda.cudart()
+    torch.cuda.synchronize()
+    cudart.cudaProfilerStart()
+    try:
+        yield
+    finally:
+        torch.cuda.synchronize()
+        cudart.cudaProfilerStop()
 
 
 def _build_o_case(
@@ -510,33 +541,43 @@ def _write_outputs(
             f"{row['avg_power_watts']:.2f} | {row['avg_gpu_clock_mhz']:.2f} |"
         )
 
-    lines.extend(
-        [
-            "",
-            "## State Chain vs Fixed Replay",
-            "",
-            "| Workload | Steps / Run | Fixed GEMM TFLOPs/s | Chain GEMM TFLOPs/s | GEMM Delta (%) | Power Delta (W) | Clock Delta (MHz) |",
-            "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
-        ]
-    )
-    for workload in metadata["workloads"]:
-        for steps_per_run in metadata["steps"]:
-            fixed = by_key[("fixed_replay", workload, steps_per_run)]
-            chain = by_key[("state_chain", workload, steps_per_run)]
-            gemm_delta = (
-                (chain["gemm_tflops_s"] - fixed["gemm_tflops_s"])
-                / fixed["gemm_tflops_s"]
-                * 100.0
-            )
-            power_delta = chain["avg_power_watts"] - fixed["avg_power_watts"]
-            clock_delta = (
-                chain["avg_gpu_clock_mhz"] - fixed["avg_gpu_clock_mhz"]
-            )
-            lines.append(
-                f"| {workload} | {steps_per_run} | {fixed['gemm_tflops_s']:.2f} | "
-                f"{chain['gemm_tflops_s']:.2f} | {gemm_delta:.2f} | "
-                f"{power_delta:.2f} | {clock_delta:.2f} |"
-            )
+    if (
+        "fixed_replay" in metadata["modes"]
+        and "state_chain" in metadata["modes"]
+    ):
+        lines.extend(
+            [
+                "",
+                "## State Chain vs Fixed Replay",
+                "",
+                "| Workload | Steps / Run | Fixed GEMM TFLOPs/s | Chain GEMM TFLOPs/s | GEMM Delta (%) | Power Delta (W) | Clock Delta (MHz) |",
+                "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+            ]
+        )
+        for workload in metadata["workloads"]:
+            for steps_per_run in metadata["steps"]:
+                fixed_key = ("fixed_replay", workload, steps_per_run)
+                chain_key = ("state_chain", workload, steps_per_run)
+                if fixed_key not in by_key or chain_key not in by_key:
+                    continue
+                fixed = by_key[fixed_key]
+                chain = by_key[chain_key]
+                gemm_delta = (
+                    (chain["gemm_tflops_s"] - fixed["gemm_tflops_s"])
+                    / fixed["gemm_tflops_s"]
+                    * 100.0
+                )
+                power_delta = (
+                    chain["avg_power_watts"] - fixed["avg_power_watts"]
+                )
+                clock_delta = (
+                    chain["avg_gpu_clock_mhz"] - fixed["avg_gpu_clock_mhz"]
+                )
+                lines.append(
+                    f"| {workload} | {steps_per_run} | {fixed['gemm_tflops_s']:.2f} | "
+                    f"{chain['gemm_tflops_s']:.2f} | {gemm_delta:.2f} | "
+                    f"{power_delta:.2f} | {clock_delta:.2f} |"
+                )
 
     norm_pairs = metadata.get("norm_pairs", [])
     if norm_pairs:
@@ -677,6 +718,10 @@ def run(args: argparse.Namespace) -> list[dict[str, Any]]:
                     eps=args.eps,
                 )
                 label = f"{mode}/{workload}@steps={steps_per_run}"
+                active_nvtx_label = (
+                    "gemm_replay_vs_chain__"
+                    f"{mode}__{workload}__steps_{steps_per_run}__active"
+                )
                 print(f"Running {label}", flush=True)
 
                 with torch.inference_mode():
@@ -697,11 +742,19 @@ def run(args: argparse.Namespace) -> list[dict[str, Any]]:
                     )
                     monitor.start()
                     torch.cuda.synchronize()
-                    start = time.perf_counter()
-                    for _ in range(repeat):
-                        case.run_once()
-                    torch.cuda.synchronize()
-                    elapsed = time.perf_counter() - start
+                    with _cuda_profiler_range(
+                        torch, args.profile_cuda_profiler_api
+                    ):
+                        with _nvtx_range(
+                            torch,
+                            active_nvtx_label,
+                            args.profile_active_nvtx,
+                        ):
+                            start = time.perf_counter()
+                            for _ in range(repeat):
+                                case.run_once()
+                            torch.cuda.synchronize()
+                            elapsed = time.perf_counter() - start
                     monitor.stop()
 
                     gemm_time_ms = case.measure_gemm_time_ms(repeat)
@@ -735,6 +788,7 @@ def run(args: argparse.Namespace) -> list[dict[str, Any]]:
                     "gemm_flops_per_iter": case.gemm_flops_per_iter,
                     "description": case.description,
                     "monitor_csv": str(monitor_csv),
+                    "active_nvtx_label": active_nvtx_label,
                     **_monitor_summary(records),
                 }
                 rows.append(row)
@@ -764,6 +818,8 @@ def run(args: argparse.Namespace) -> list[dict[str, Any]]:
         "max_repeat": args.max_repeat,
         "monitor_gpu_index": args.monitor_gpu_index,
         "monitor_interval": args.monitor_interval,
+        "profile_active_nvtx": args.profile_active_nvtx,
+        "profile_cuda_profiler_api": args.profile_cuda_profiler_api,
         "eps": args.eps,
         "throughput_unit": "GEMM-only TFLOPs/s",
         "gemm_tflops_definition": (
@@ -809,6 +865,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-repeat", type=int, default=50000)
     parser.add_argument("--monitor-interval", type=float, default=0.01)
     parser.add_argument("--monitor-gpu-index", type=int, default=3)
+    parser.add_argument(
+        "--profile-active-nvtx",
+        action="store_true",
+        help=(
+            "Wrap only the timed active repeat loop in a stable NVTX range. "
+            "Warmup, probe, and GEMM event timing remain outside the range."
+        ),
+    )
+    parser.add_argument(
+        "--profile-cuda-profiler-api",
+        action="store_true",
+        help=(
+            "Call cudaProfilerStart/Stop around only the timed active loop. "
+            "This is intended for CUPTI injection/start-stop profiling."
+        ),
+    )
     parser.add_argument("--eps", type=float, default=1e-6)
     parser.add_argument("--output-dir", type=Path)
     return parser.parse_args()
