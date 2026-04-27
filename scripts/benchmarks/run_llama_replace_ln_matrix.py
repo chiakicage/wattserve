@@ -170,9 +170,12 @@ def write_metadata_json(metadata_path: Path, metadata: dict[str, Any]) -> None:
 
 def run_llama_replace_ln_matrix(
     output_dir: Path,
+    models: list[str],
+    prompt_lengths: list[int],
     warmup: int,
     repeat: int,
     monitor_interval: float,
+    monitor_gpu_index: int | None = None,
     refresh_root_index: bool = False,
     root_index_path: Path = ROOT_BENCHMARK_INDEX_PATH,
 ) -> list[dict[str, Any]]:
@@ -193,18 +196,19 @@ def run_llama_replace_ln_matrix(
         "summary_csv": str(summary_csv_path),
         "benchmark_markdown": str(benchmark_md_path),
         "plots_dir": str(plots_dir),
-        "models": DEFAULT_MODELS,
-        "prompt_lengths": DEFAULT_PROMPT_LENGTHS,
+        "models": models,
+        "prompt_lengths": prompt_lengths,
         "variants": [variant for variant, _ in DEFAULT_VARIANTS],
         "warmup": warmup,
         "repeat": repeat,
         "monitor_interval": monitor_interval,
+        "monitor_gpu_index": monitor_gpu_index,
         "environment": collect_environment_metadata(),
     }
     write_metadata_json(metadata_path, metadata)
 
-    for model in DEFAULT_MODELS:
-        for prompt_len in DEFAULT_PROMPT_LENGTHS:
+    for model in models:
+        for prompt_len in prompt_lengths:
             for variant, replace_ln in DEFAULT_VARIANTS:
                 monitor_csv_path = (
                     monitor_dir / f"{model}_prompt{prompt_len}_{variant}.csv"
@@ -222,6 +226,7 @@ def run_llama_replace_ln_matrix(
                     repeat=repeat,
                     monitor_interval=monitor_interval,
                     monitor_csv_path=str(monitor_csv_path),
+                    monitor_gpu_index=monitor_gpu_index,
                 )
                 if result.get("monitor_csv"):
                     result["monitor_csv"] = monitor_csv_path.relative_to(
@@ -278,6 +283,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="GPU monitor sampling interval in seconds.",
     )
     parser.add_argument(
+        "--monitor_gpu_index",
+        type=int,
+        default=None,
+        help=(
+            "Physical GPU index for NVML monitoring. "
+            "Defaults to the first CUDA_VISIBLE_DEVICES entry when possible."
+        ),
+    )
+    parser.add_argument(
+        "--models",
+        nargs="+",
+        default=DEFAULT_MODELS,
+        choices=DEFAULT_MODELS,
+        help="Subset of model sizes to run.",
+    )
+    parser.add_argument(
+        "--prompt_lengths",
+        nargs="+",
+        type=int,
+        default=DEFAULT_PROMPT_LENGTHS,
+        choices=DEFAULT_PROMPT_LENGTHS,
+        help="Subset of prompt lengths to run.",
+    )
+    parser.add_argument(
         "--publish_latest",
         action="store_true",
         help=(
@@ -307,9 +336,12 @@ def main() -> int:
 
     run_llama_replace_ln_matrix(
         output_dir=output_dir,
+        models=args.models,
+        prompt_lengths=args.prompt_lengths,
         warmup=args.warmup,
         repeat=args.repeat,
         monitor_interval=args.monitor_interval,
+        monitor_gpu_index=args.monitor_gpu_index,
         refresh_root_index=args.publish_latest and not args.skip_root_index,
     )
     print(f"Summary CSV: {output_dir / 'summary.csv'}")

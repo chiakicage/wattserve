@@ -1,4 +1,5 @@
 import argparse
+import os
 import sys
 import time
 from datetime import datetime, timezone
@@ -90,6 +91,17 @@ def build_ablation_flags(
         "replace_rope": replace_rope,
         "replace_activation": replace_activation,
     }
+
+
+def _resolve_monitor_gpu_index(explicit_index: int | None) -> int:
+    if explicit_index is not None:
+        return explicit_index
+    visible = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
+    if visible:
+        first_token = visible.split(",")[0].strip()
+        if first_token.isdigit():
+            return int(first_token)
+    return 0
 
 
 def get_variant_name(
@@ -232,6 +244,7 @@ def benchmark(
     repeat: int = DEFAULT_REPEAT,
     monitor_interval: float = DEFAULT_MONITOR_INTERVAL,
     monitor_csv_path: str | None = None,
+    monitor_gpu_index: int | None = None,
 ) -> dict[str, Any]:
     ablation_flags = build_ablation_flags(
         replace_ln=replace_ln,
@@ -284,7 +297,10 @@ def benchmark(
                 _ = lm_head(model(position_ids, input_ids=input_ids))
         torch.cuda.synchronize()
 
-        monitor = GPUMonitor(gpu_index=0, interval=monitor_interval)
+        monitor = GPUMonitor(
+            gpu_index=_resolve_monitor_gpu_index(monitor_gpu_index),
+            interval=monitor_interval,
+        )
         monitor.start()
         torch.cuda.synchronize()
         start_time = time.perf_counter()
@@ -468,6 +484,15 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional path for exporting per-sample GPU monitor data.",
     )
+    parser.add_argument(
+        "--monitor_gpu_index",
+        type=int,
+        default=None,
+        help=(
+            "Physical GPU index for NVML monitoring. "
+            "Defaults to the first CUDA_VISIBLE_DEVICES entry when possible."
+        ),
+    )
     return parser
 
 
@@ -486,6 +511,7 @@ def main() -> int:
         repeat=args.repeat,
         monitor_interval=args.monitor_interval,
         monitor_csv_path=args.monitor_csv_path,
+        monitor_gpu_index=args.monitor_gpu_index,
     )
 
     if result["status"] == SUCCESS_STATUS:

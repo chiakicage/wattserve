@@ -141,18 +141,6 @@ class LlamaAttention(nn.Module):
             bias=False,
         )
 
-        assert config.rms_norm_eps is not None
-        self.q_norm = RMSNorm(
-            self.head_dim,
-            eps=config.rms_norm_eps,
-            ablation_config=self.ablation_config,
-        )
-        self.k_norm = RMSNorm(
-            self.head_dim,
-            eps=config.rms_norm_eps,
-            ablation_config=self.ablation_config,
-        )
-
     def forward(
         self,
         positions: torch.Tensor,
@@ -164,8 +152,6 @@ class LlamaAttention(nn.Module):
         q = q.view(-1, self.num_heads, self.head_dim)
         k = k.view(-1, self.num_kv_heads, self.head_dim)
         v = v.view(-1, self.num_kv_heads, self.head_dim)
-        q, _ = self.q_norm(q)
-        k, _ = self.k_norm(k)
         if not self.ablation_config.replace_rope:
             q, k = apply_rope_pos_ids(
                 q,

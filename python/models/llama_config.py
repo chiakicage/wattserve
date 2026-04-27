@@ -88,7 +88,7 @@ def calculate_llama_parameter_count(
         + q_size * hidden_size
     )
     mlp_params = 3 * hidden_size * intermediate_size
-    norm_params = 2 * hidden_size + 2 * head_dim
+    norm_params = 2 * hidden_size
     params_per_layer = attn_params + mlp_params + norm_params
 
     embedding_params = config.vocab_size * hidden_size

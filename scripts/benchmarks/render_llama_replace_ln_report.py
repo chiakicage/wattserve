@@ -473,6 +473,26 @@ def build_result_benchmark_markdown(
         source_output_dir_display = _display_path(Path(source_output_dir))
     environment = metadata.get("environment", {})
     device_name = environment.get("cuda_device_name", "n/a")
+    report_models = metadata.get("models", DEFAULT_MODELS)
+    report_prompt_lengths = metadata.get(
+        "prompt_lengths", DEFAULT_PROMPT_LENGTHS
+    )
+    standard_matrix_requested = (
+        list(report_models) == DEFAULT_MODELS
+        and list(report_prompt_lengths) == DEFAULT_PROMPT_LENGTHS
+    )
+    report_scope_line = (
+        "- Standard matrix: "
+        f"`7B/13B/34B/70B` x `{_prompt_lengths_display(DEFAULT_PROMPT_LENGTHS)}` "
+        "x `baseline/replace_ln`"
+    )
+    if not standard_matrix_requested:
+        report_scope_line = (
+            "- Selected runs: "
+            f"`{'/'.join(str(model) for model in report_models)}` x "
+            f"`{_prompt_lengths_display([int(length) for length in report_prompt_lengths])}` "
+            "x `baseline/replace_ln`"
+        )
 
     lines = [
         "# Llama `replace_ln` Benchmark",
@@ -481,16 +501,13 @@ def build_result_benchmark_markdown(
         "",
         "## Summary",
         "",
-        (
-            "- Standard matrix: "
-            f"`7B/13B/34B/70B` x `{_prompt_lengths_display(DEFAULT_PROMPT_LENGTHS)}` "
-            "x `baseline/replace_ln`"
-        ),
+        report_scope_line,
         f"- Result directory: `{output_dir_display}`",
         f"- Summary CSV: `{summary_csv_display}`",
         f"- Metadata: `{metadata_display}`",
         f"- Plots directory: `{plots_dir_display}`",
         "- `--replace_ln` is an ablation flag, not a numerically equivalent model variant.",
+        "- The current Llama attention path in this repository does not apply q/k RMSNorm.",
         "- Prompt lengths outside the standard matrix are excluded from the summary tables and plots in this report.",
     ]
 
