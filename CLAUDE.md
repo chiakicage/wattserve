@@ -189,6 +189,7 @@ fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python scripts/benchma
 - Benchmarks assume CUDA is available and use `cuda:0`.
 - Model weights and linear layers are created in `bfloat16`.
 - `python/monitor/gpu_monitor.py` depends on NVML via `pynvml` for power and clock measurements.
+- Benchmark metric convention: plain `GEMM TFLOPs/s` must mean GEMM FLOPs divided by measured GEMM kernel time only. Do not divide GEMM FLOPs by whole-workload time that includes norm, activation, copy, RoPE, attention setup, or other non-GEMM work and call it `GEMM TFLOPs/s`. If a whole-workload denominator is intentionally used, label it explicitly as `effective`, `end-to-end`, or `GEMM-normalized` throughput instead.
 - The Llama `34B` and `70B` configs preserve large-model tensor shapes but reduce layer count to fit an A100 40GB persistent-memory budget.
 - `--replace_ln` is an ablation flag, not a numerically equivalent model variant.
 - `--replace_attention`, `--replace_rope`, and `--replace_activation` are also ablation flags intended for component-level performance study, not numerically equivalent model variants.

@@ -1,0 +1,85 @@
+{
+  "prompt_len": 8192,
+  "hidden_size": 5120,
+  "intermediate_size": 13824,
+  "case_kind": "mlp",
+  "case_description": "MLP gate + up + down GEMMs",
+  "shape_label": "gate/up: (8192, 5120) x (5120, 13824); down: (8192, 13824) x (13824, 5120)",
+  "dtype": "bfloat16",
+  "modes": [
+    "fixed_replay",
+    "state_chain"
+  ],
+  "workloads": [
+    "mlp_silu",
+    "mlp_silu_fused_add_norm"
+  ],
+  "steps": [
+    40
+  ],
+  "warmup": 20,
+  "probe_repeat": 10,
+  "target_timed_seconds": 2.0,
+  "max_repeat": 50000,
+  "monitor_gpu_index": 3,
+  "monitor_interval": 0.01,
+  "eps": 1e-06,
+  "throughput_unit": "GEMM-only TFLOPs/s",
+  "gemm_tflops_definition": "GEMM FLOPs divided by CUDA event time around timed torch.mm kernels only; non-GEMM work is excluded from both numerator and denominator.",
+  "excluded_from_flops": [
+    "silu_and_mul",
+    "activation_copy",
+    "fused_add_rmsnorm"
+  ],
+  "norm_pairs": [
+    [
+      "mlp_no_act",
+      "mlp_no_act_fused_add_norm",
+      "mlp_no_act"
+    ],
+    [
+      "mlp_silu",
+      "mlp_silu_fused_add_norm",
+      "mlp_silu"
+    ]
+  ],
+  "activation_pairs": [
+    [
+      "mlp_no_act",
+      "mlp_silu",
+      "without_norm"
+    ],
+    [
+      "mlp_no_act_fused_add_norm",
+      "mlp_silu_fused_add_norm",
+      "with_norm"
+    ]
+  ],
+  "output_dir": "results/gemm_replay_vs_chain/latest/a100_40g_sxm",
+  "published_device_slug": "a100_40g_sxm",
+  "published_device_label": "A100 40G SXM",
+  "source_output_dir": "results/gemm_replay_vs_chain/20260427T100209Z",
+  "source_summary_csv": "results/gemm_replay_vs_chain/20260427T100209Z/summary.csv",
+  "published_snapshot_root_dir": "results/gemm_replay_vs_chain/latest",
+  "published_snapshot_dir": "results/gemm_replay_vs_chain/latest/a100_40g_sxm",
+  "published_snapshot_generated_at_utc": "2026-04-27T10:17:38.641331Z",
+  "summary_csv": "results/gemm_replay_vs_chain/latest/a100_40g_sxm/summary.csv",
+  "metadata_json": "results/gemm_replay_vs_chain/latest/a100_40g_sxm/metadata.json",
+  "benchmark_markdown": "results/gemm_replay_vs_chain/latest/a100_40g_sxm/BENCHMARK.md",
+  "monitor_dir": "results/gemm_replay_vs_chain/latest/a100_40g_sxm/monitor",
+  "selection": {
+    "case_kind": "mlp",
+    "workloads": [
+      "mlp_silu",
+      "mlp_silu_fused_add_norm"
+    ],
+    "modes": [
+      "fixed_replay",
+      "state_chain"
+    ],
+    "steps": [
+      40
+    ],
+    "reason": "minimal published snapshot for the MLP silu replay-vs-chain power/clock finding"
+  }
+}
