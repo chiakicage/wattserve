@@ -160,13 +160,29 @@ fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python scripts/benchma
 
 ## Benchmark Notes
 
-### Normalization-Induced Power Throttling
+### Norm-Induced Power Throttling
 
-We use the name `Normalization-Induced Power Throttling` for the observation that a seemingly cheap normalization path can raise sustained power enough to trigger downclocking and therefore reduce end-to-end LLM serving throughput by much more than its standalone FLOPs share would suggest.
+We use the name `Norm-Induced Power Throttling` for the observation that removing
+the normalization path can reduce total compute time by more than the measured
+self-time of the normalization kernels. In other words, the problem is not just
+that RMSNorm / LayerNorm takes time. The larger problem is that normalization
+kernels inserted into a continuous GEMM-heavy workload can raise sustained
+power, push the GPU into a lower-clock operating point, and make the surrounding
+GEMMs run less efficiently.
+
+The evidence pattern is therefore:
+
+- removing Norm reduces end-to-end time by more than Norm kernel self-time
+- removing Norm lowers average power
+- the lower-power run recovers GPU clock
+- GEMM-only throughput improves even though the GEMM shapes are unchanged
+
+This is why the effect is described as a power / frequency interaction induced
+by Norm in the block context, rather than as the standalone latency cost of Norm.
 
 ### Current Working Conclusion
 
-As of the latest canonical matrix on `2026-04-14` ([results/llama_replace_ln_prefill/latest/a100_40g_sxm/BENCHMARK.md](results/llama_replace_ln_prefill/latest/a100_40g_sxm/BENCHMARK.md)), the current working onset region for `Normalization-Induced Power Throttling` is `prompt_len >= 256`.
+As of the latest canonical matrix on `2026-04-14` ([results/llama_replace_ln_prefill/latest/a100_40g_sxm/BENCHMARK.md](results/llama_replace_ln_prefill/latest/a100_40g_sxm/BENCHMARK.md)), the current working onset region for `Norm-Induced Power Throttling` is `prompt_len >= 256`.
 
 We treat a case as a clearly throttled point when the baseline run simultaneously shows:
 
@@ -200,7 +216,7 @@ The current research plan is:
 2. Re-run the aligned power-of-two benchmark grid with those switches to determine whether the observed throttle signature is unique to LayerNorm or shared by other components.
 3. If LayerNorm is the only component that consistently reproduces the throttle signature, modify the LayerNorm / RMSNorm operator in vendored FlashInfer and integrate that modified kernel into the project for end-to-end comparison.
 4. Add reduced microbenchmarks, especially `GEMM + LayerNorm` and `GEMM + Attention + LayerNorm`, to check whether the same power-throttle behavior can be reproduced in a simpler setting.
-5. Use raw monitor traces plus TTFT / TFLOPs data to separate direct compute-cost reduction from clock-recovery effects.
+5. Use raw monitor traces plus TTFT / TFLOPs data to separate direct Norm self-time reduction from the larger clock-recovery effect on the surrounding GEMMs.
 6. Keep reporting centered on the power-of-two prompt grid so the conclusions remain aligned with the CUDA kernel alignment boundaries that are most likely to matter.
 
 ### Important Caveats

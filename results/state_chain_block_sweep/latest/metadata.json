@@ -1,0 +1,48 @@
+{
+  "run_started_at_utc": "2026-04-27T14:54:56.219869Z",
+  "output_dir": "/home/cage/wattserve/results/state_chain_block_sweep/20260427T145456Z",
+  "summary_csv": "/home/cage/wattserve/results/state_chain_block_sweep/20260427T145456Z/summary.csv",
+  "metadata_json": "/home/cage/wattserve/results/state_chain_block_sweep/20260427T145456Z/metadata.json",
+  "benchmark_markdown": "/home/cage/wattserve/results/state_chain_block_sweep/20260427T145456Z/BENCHMARK.md",
+  "plots_dir": "/home/cage/wattserve/results/state_chain_block_sweep/20260427T145456Z/plots",
+  "kernel_profile_dir": "/home/cage/wattserve/results/state_chain_block_sweep/20260427T145456Z/kernel_profile",
+  "monitor_dir": "/home/cage/wattserve/results/state_chain_block_sweep/20260427T145456Z/monitor",
+  "models": [
+    "7B",
+    "13B",
+    "34B",
+    "70B"
+  ],
+  "batch_sizes": [
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024,
+    2048,
+    4096,
+    8192,
+    16384,
+    32768
+  ],
+  "variants": [
+    "without_norm",
+    "with_norm"
+  ],
+  "steps_per_run": 1,
+  "dtype": "bfloat16",
+  "warmup": 20,
+  "probe_repeat": 10,
+  "target_timed_seconds": 3.0,
+  "max_repeat": 50000,
+  "monitor_interval": 0.01,
+  "monitor_gpu_index": 3,
+  "profile_repeat": 1,
+  "skip_kernel_profile": false,
+  "eps": 1e-06,
+  "cuda_visible_devices": "3",
+  "attention_flops": "4 * q_size * S * (S + 1) / 2",
+  "completed_cases": 88,
+  "failed_cases": 0
+}

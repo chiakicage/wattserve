@@ -203,6 +203,13 @@ fish -lc 'cd <repo_root>; source .venv/bin/activate.fish; python scripts/benchma
 - Publishing either benchmark family's `latest/` snapshot is an explicit action. Do not overwrite `results/llama_replace_ln_prefill/latest/<device_slug>/` or `results/llama_component_ablation_prefill/latest/<device_slug>/` unless the user asks for it.
 - The batch runner records individual run failures to `summary.csv` and continues with the remaining matrix entries.
 
+## Plotting Standards
+
+- Benchmark plots must be readable at a glance. Use large, bold titles, large bold axis labels, thick axis spines, large tick labels, and thick line strokes.
+- For line plots, use visibly thick lines and markers by default. Avoid thin default matplotlib lines for published benchmark figures.
+- Legends should also use larger text and a bold title when present.
+- Prefer plot dimensions and DPI that remain clear in IDE previews, markdown renderers, and presentation screenshots. If a plot looks like it requires zooming to read axis labels or distinguish lines, redraw it with larger fonts and thicker strokes before publishing.
+
 ## Working Notes For Future Edits
 
 - Check imports before editing because the repo currently contains both moved and deleted paths in git status.
