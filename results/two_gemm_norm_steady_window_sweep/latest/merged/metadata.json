@@ -1,0 +1,19 @@
+{
+  "generated_at_utc": "2026-04-28T18:44:57.447804+00:00",
+  "baseline_result_dir": "/home/cage/wattserve/results/two_gemm_norm_steady_window_sweep/20260428T170350Z",
+  "norm_result_dir": "/home/cage/wattserve/results/two_gemm_norm_steady_window_sweep/20260428T172623Z",
+  "output_dir": "/home/cage/wattserve/results/two_gemm_norm_steady_window_sweep/gemm_duration_by_norm_duration_steady",
+  "shape": {
+    "m": 8192,
+    "n": 8192,
+    "k": 32768
+  },
+  "target_active_s": 32.0,
+  "analysis_window_s": 20.0,
+  "tail_policy": "Each case ran at least 30s active CUDA time; metrics are computed from the final 20s tail window.",
+  "state_chain": "current -> middle -> next_current, final output feeds the next GEMM phase",
+  "plots": [
+    "/home/cage/wattserve/results/two_gemm_norm_steady_window_sweep/gemm_duration_by_norm_duration_steady/plots/gemm_phase_clock_by_norm_duration_tail.png",
+    "/home/cage/wattserve/results/two_gemm_norm_steady_window_sweep/gemm_duration_by_norm_duration_steady/plots/gemm_phase_tflops_by_norm_duration_tail.png"
+  ]
+}

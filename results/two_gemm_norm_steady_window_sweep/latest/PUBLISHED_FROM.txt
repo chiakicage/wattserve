@@ -1,0 +1,12 @@
+Published snapshot sources:
+
+- Consolidated findings: GEMM_NORM_RATIO.md
+- Merged steady-window sweep: results/two_gemm_norm_steady_window_sweep/gemm_duration_by_norm_duration_steady/
+- No-norm baseline: results/two_gemm_norm_steady_window_sweep/20260428T170350Z/
+- Nonzero norm sweep: results/two_gemm_norm_steady_window_sweep/20260428T172623Z/
+- n1 steady-window sweep: results/two_gemm_norm_steady_window_sweep/20260428T194600Z/
+
+Notes:
+
+- The raw timestamped monitor and phase-event CSV directories are intentionally left out of git.
+- This latest snapshot keeps the summaries, metadata, final analysis, and the plots used for review.

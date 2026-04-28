@@ -1,0 +1,18 @@
+{
+  "source_summary": "/home/cage/wattserve/results/two_gemm_norm_steady_window_sweep/20260428T194600Z/summary.csv",
+  "selected_gemm_steps": [
+    1,
+    16,
+    20
+  ],
+  "window": "first 5s of final 20s analysis window",
+  "output": "/home/cage/wattserve/results/two_gemm_norm_steady_window_sweep/20260428T194600Z/plots/timeline/n1_three_state_clock_power_timeline_tail5s.png",
+  "power_ylim": [
+    340.26,
+    423.52
+  ],
+  "clock_ylim": [
+    1220,
+    1430
+  ]
+}

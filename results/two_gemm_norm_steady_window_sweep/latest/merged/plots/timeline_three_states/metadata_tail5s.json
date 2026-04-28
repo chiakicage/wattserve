@@ -1,0 +1,29 @@
+{
+  "source_summary": "/home/cage/wattserve/results/two_gemm_norm_steady_window_sweep/gemm_duration_by_norm_duration_steady/summary.csv",
+  "output_dir": "/home/cage/wattserve/results/two_gemm_norm_steady_window_sweep/gemm_duration_by_norm_duration_steady/plots/timeline_three_states",
+  "selected_norm_steps": [
+    128,
+    512,
+    1024
+  ],
+  "selected_gemm_steps": [
+    1,
+    16,
+    20
+  ],
+  "window": "first 5s of final 20s analysis window",
+  "overview": "/home/cage/wattserve/results/two_gemm_norm_steady_window_sweep/gemm_duration_by_norm_duration_steady/plots/timeline_three_states/three_state_clock_power_overview_tail5s.png",
+  "details": [
+    "/home/cage/wattserve/results/two_gemm_norm_steady_window_sweep/gemm_duration_by_norm_duration_steady/plots/timeline_three_states/n128_three_state_clock_power_timeline_tail5s.png",
+    "/home/cage/wattserve/results/two_gemm_norm_steady_window_sweep/gemm_duration_by_norm_duration_steady/plots/timeline_three_states/n512_three_state_clock_power_timeline_tail5s.png",
+    "/home/cage/wattserve/results/two_gemm_norm_steady_window_sweep/gemm_duration_by_norm_duration_steady/plots/timeline_three_states/n1024_three_state_clock_power_timeline_tail5s.png"
+  ],
+  "power_ylim": [
+    253.37,
+    597.93
+  ],
+  "clock_ylim": [
+    1220,
+    1430
+  ]
+}

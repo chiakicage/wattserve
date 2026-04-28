@@ -1,0 +1,39 @@
+{
+  "run_started_at_utc": "2026-04-28T17:26:23.076647Z",
+  "output_dir": "/home/cage/wattserve/results/two_gemm_norm_steady_window_sweep/20260428T172623Z",
+  "cuda_visible_devices": "3",
+  "m": 8192,
+  "n": 8192,
+  "k": 32768,
+  "gemm_steps": [
+    1,
+    2,
+    4,
+    8,
+    12,
+    16,
+    18,
+    20,
+    22,
+    24,
+    32,
+    48,
+    64
+  ],
+  "norm_steps": [
+    8,
+    16,
+    32,
+    64,
+    128,
+    512,
+    1024,
+    2048,
+    4096
+  ],
+  "target_active_s": 32.0,
+  "analysis_window_s": 20.0,
+  "cycle_margin": 1.2,
+  "monitor_interval": 0.01,
+  "monitor_gpu_index": 3
+}
