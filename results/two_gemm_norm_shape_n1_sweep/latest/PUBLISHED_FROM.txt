@@ -1,0 +1,8 @@
+Published from:
+- results/two_gemm_norm_shape_n1_sweep/20260429T084814Z
+- results/two_gemm_norm_shape_n1_sweep/20260429T112339Z
+- results/two_gemm_norm_shape_n1_sweep/combined_dense_0_300ms
+
+Published contents are intentionally curated to keep only the final two
+GEMM-step-axis figures plus the CSV inputs needed to reproduce the reported
+transition table.
