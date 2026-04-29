@@ -1,0 +1,2 @@
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+100.0,13145082329,700,18778689.0,18756646.5,18540759,18835797,40443.6,ampere_bf16_s16816gemm_bf16_256x128_ldg8_f2f_stages_64x3_nn

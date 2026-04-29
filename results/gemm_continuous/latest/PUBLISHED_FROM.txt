@@ -1,10 +1,15 @@
 Published snapshot sources:
 
 - Consolidated findings: GEMM_CONTINUOUS.md
-- Primary NVML run: results/gemm_continuous/20260429T115714Z/
-- Nsight Systems run: results/gemm_continuous/20260429T115741Z/
+- Unlocked primary NVML run: results/gemm_continuous/20260429T115714Z/
+- Unlocked Nsight Systems run: results/gemm_continuous/20260429T115741Z/
+- Locked 1320 MHz primary NVML run: results/gemm_continuous/20260429T130616Z/
+- Locked 1320 MHz Nsight Systems run: results/gemm_continuous/20260429T130718Z/
+- Locked 1110 MHz primary NVML run: results/gemm_continuous/20260429T131517Z/
+- Locked 1110 MHz Nsight Systems run: results/gemm_continuous/20260429T131601Z/
 
 Notes:
 
 - The raw Nsight Systems `.nsys-rep` and `.sqlite` files are intentionally not tracked.
-- This snapshot keeps the primary monitor/events/plots and exported active-range nsys CSV analysis.
+- This snapshot keeps primary monitor/events/plots and exported active-range
+  nsys CSV analysis for the unlocked and locked-clock runs.
