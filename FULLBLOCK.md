@@ -203,6 +203,86 @@ wording, `Norm-Induced Power Throttling` means that Norm inserted into a
 continuous GEMM sequence raises sustained power and indirectly slows the
 neighboring GEMMs through frequency reduction.
 
+## Operator Phase and Replay-vs-Chain Follow-up
+
+Follow-up profiling was added to separate two effects that should not be
+conflated:
+
+1. isolated fixed-replay behavior, where a single operator repeatedly consumes
+   the same allocated tensors for about `10s`; and
+2. state-chain behavior, where an output tensor becomes the next step's input.
+
+The isolated per-operator profile for `70B`, `S=32768`, `bfloat16` is under:
+
+- `results/fullblock_operator_phase_profile/20260429T141335Z/`
+- Script: `scripts/benchmarks/run_fullblock_operator_phase_profile.py`
+
+In that profile, the compute-heavy phases sit near the power wall, while the
+memory-heavy phases do not:
+
+| Op | Mode | Time / Iter | Throughput | Avg Power | Avg Clock |
+| --- | --- | ---: | ---: | ---: | ---: |
+| `q_gemm` | isolated fixed replay | 16.486 ms | 266.78 TFLOPs/s | 397.86 W | 1262 MHz |
+| `k_gemm` | isolated fixed replay | 2.150 ms | 255.68 TFLOPs/s | 398.97 W | 1276 MHz |
+| `v_gemm` | isolated fixed replay | 2.152 ms | 255.48 TFLOPs/s | 399.10 W | 1275 MHz |
+| `rope` | isolated fixed replay | 0.910 ms | 1327.62 GB/s | 269.29 W | 1410 MHz |
+| `causal_attention` | isolated fixed replay | 79.847 ms | 220.33 TFLOPs/s | 398.01 W | 1341 MHz |
+| `o_gemm` | isolated fixed replay | 15.765 ms | 278.98 TFLOPs/s | 399.33 W | 1320 MHz |
+| `post_attn_fused_add_rmsnorm` | isolated fixed replay | 1.574 ms | 1364.04 GB/s | 272.95 W | 1410 MHz |
+| `gate_gemm` | isolated fixed replay | 57.706 ms | 266.75 TFLOPs/s | 398.16 W | 1261 MHz |
+| `up_gemm` | isolated fixed replay | 57.669 ms | 266.92 TFLOPs/s | 397.68 W | 1261 MHz |
+| `gate_copy_to_cat` | isolated fixed replay | 3.850 ms | 976.06 GB/s | 307.54 W | 1410 MHz |
+| `up_copy_to_cat` | isolated fixed replay | 3.850 ms | 976.06 GB/s | 308.29 W | 1410 MHz |
+| `silu_and_mul` | isolated fixed replay | 4.128 ms | 1365.75 GB/s | 303.57 W | 1410 MHz |
+| `down_gemm` | isolated fixed replay | 60.827 ms | 253.07 TFLOPs/s | 398.03 W | 1210 MHz |
+| `post_ffn_fused_add_rmsnorm` | isolated fixed replay | 1.576 ms | 1362.99 GB/s | 273.61 W | 1410 MHz |
+
+This shows that `fused_add_rmsnorm` is not, by itself, a high-power operator in
+isolation. Like RoPE and `silu_and_mul`, it runs at full `1410 MHz` when
+repeated alone. The isolated profile therefore cannot explain the full-block
+effect as "the norm kernel itself draws 400 W."
+
+The missing distinction is fixed replay versus state chain. Follow-up
+replay-vs-chain runs used the same `70B`, `S=32768` shapes:
+
+- H-to-H GEMM:
+  `results/gemm_replay_vs_chain/manual_70B_S32768_o_10s_serial/`
+- MLP with `silu_and_mul`:
+  `results/gemm_replay_vs_chain/manual_70B_S32768_mlp_silu_10s_serial/`
+
+| Workload | Execution Mode | GEMM TFLOPs/s | Avg Power | Avg Clock |
+| --- | --- | ---: | ---: | ---: |
+| H-to-H GEMM | fixed replay | 266.31 | 397.58 W | 1265 MHz |
+| H-to-H GEMM | state chain | 297.78 | 396.52 W | 1371 MHz |
+| MLP + `silu_and_mul` | fixed replay | 264.84 | 395.82 W | 1259 MHz |
+| MLP + `silu_and_mul` | state chain | 296.91 | 349.61 W | 1410 MHz |
+
+This explains why the isolated GEMM phase profile showed lower clocks than the
+`without_norm` full-block run. Repeating the same input/output buffers is a
+fixed-replay stress case: it maintains a high tensor-core activity pattern,
+stays near `~398 W`, and is frequency-limited. In the state-chain case, the
+output distribution is fed forward. Without normalization, that evolving state
+can reduce effective switching activity and sustained power, especially in the
+MLP path. The lower-power state-chain run can then recover clock.
+
+The `70B`, `S=32768` full-block numbers line up with that interpretation:
+
+| Variant | GEMM TFLOPs/s | Avg Power | Avg Clock |
+| --- | ---: | ---: | ---: |
+| `without_norm` | 295.99 | 366.18 W | 1404 MHz |
+| `with_norm` | 269.71 | 405.13 W | 1277 MHz |
+
+The current interpretation is therefore:
+
+- RoPE and `silu_and_mul` are memory-heavy, but they do not reset the hidden
+  state distribution and do not individually approach the power wall.
+- `fused_add_rmsnorm` is also not high-power in isolation, but it sits at
+  residual/block boundaries and repeatedly restores the hidden-state scale.
+- With Norm enabled, subsequent GEMMs keep a higher-activity input distribution,
+  the full block stays close to the power wall, and clocks drop.
+- Without Norm, the state chain drifts into a lower-power regime, which lets the
+  GPU recover clock and makes the surrounding GEMMs faster.
+
 ## Caveats
 
 This is a synthetic single-block state-chain benchmark. It captures the kernel
