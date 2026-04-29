@@ -1,0 +1,10 @@
+Published snapshot sources:
+
+- Consolidated findings: GEMM_CONTINUOUS.md
+- Primary NVML run: results/gemm_continuous/20260429T115714Z/
+- Nsight Systems run: results/gemm_continuous/20260429T115741Z/
+
+Notes:
+
+- The raw Nsight Systems `.nsys-rep` and `.sqlite` files are intentionally not tracked.
+- This snapshot keeps the primary monitor/events/plots and exported active-range nsys CSV analysis.

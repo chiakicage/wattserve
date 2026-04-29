@@ -24,3 +24,7 @@ results/two_gemm_norm_steady_window_sweep/*
 !results/two_gemm_norm_steady_window_sweep/latest/
 !results/two_gemm_norm_steady_window_sweep/latest/**
 results/two_gemm_norm_steady_window_sweep/latest/merged/plots/timeline_three_states/three_state_clock_power_overview_tail5s.png
+!results/gemm_continuous/
+results/gemm_continuous/*
+!results/gemm_continuous/latest/
+!results/gemm_continuous/latest/**

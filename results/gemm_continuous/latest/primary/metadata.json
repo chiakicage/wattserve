@@ -1,0 +1,20 @@
+{
+  "generated_at": "2026-04-29T11:57:29.367727Z",
+  "output_dir": "/home/cage/wattserve/results/gemm_continuous/20260429T115714Z",
+  "cuda_visible_devices": "2",
+  "process_device": "cuda:0",
+  "monitor_gpu_index": 2,
+  "active_nvtx_range": "active_continuous_gemm",
+  "args": {
+    "m": 8192,
+    "n": 8192,
+    "k": 32768,
+    "dtype": "bfloat16",
+    "gemm_units": 350,
+    "monitor_interval": 0.01,
+    "monitor_gpu_index": 2,
+    "pre_idle_s": 2.0,
+    "post_idle_s": 1.0,
+    "output_dir": null
+  }
+}

@@ -38,6 +38,10 @@ class GPUMonitor:
                     pynvml.NVML_CLOCK_MEM,
                     pynvml.NVML_CLOCK_ID_CURRENT,
                 )
+                temperature = pynvml.nvmlDeviceGetTemperature(
+                    self._handle,
+                    pynvml.NVML_TEMPERATURE_GPU,
+                )
 
                 elapsed = time.time() - self._start_time
                 record = {
@@ -45,6 +49,7 @@ class GPUMonitor:
                     "power_watts": round(power, 2),
                     "gpu_clock_mhz": gpu_clock,
                     "mem_clock_mhz": mem_clock,
+                    "temperature_c": temperature,
                 }
 
                 with self._lock:
@@ -87,6 +92,7 @@ class GPUMonitor:
             "power_watts",
             "gpu_clock_mhz",
             "mem_clock_mhz",
+            "temperature_c",
         ]
         with open(filepath, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
